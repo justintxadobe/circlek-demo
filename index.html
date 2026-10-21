@@ -111,7 +111,7 @@
    To go live, replace this with content cards or code-based experience payloads
    returned by the Web/Mobile SDK. See loadFromSdk() below. */
 const CHALLENGES = [{
-  id: "875c2c0d-2ae3-473c-aa8e-42953266f076",
+  id: "77f4da20-9b92-4497-b567-a6eb5d016e42",
   name: "Fuel + Store",
   desc: "Fuel up and grab a hot food item to earn 3 bonus Visits.",
   end: "2026-11-04T04:59:59Z",
@@ -187,7 +187,7 @@ function toast(msg){
   clearTimeout(window._tt); window._tt = setTimeout(()=>t.classList.remove("show"), 2600);
 }
 
-function resetDemo(){ state = {}; localStorage.removeItem("joined:"+LOYALTY_ID); render(); renderCards(); }
+function resetDemo(){ state = {}; localStorage.removeItem("joined:"+LOYALTY_ID); JOINED=false; render(); renderCards(); }
 
 /* Optional live hook: with the Adobe Web SDK (alloy) configured for a content-card
    or code-based surface, map returned propositions into CHALLENGES and re-render.
@@ -205,6 +205,8 @@ const ORG_ID = "120A56765E16E7BE0A495FEB@AdobeOrg";
 const DATASTREAM_ID = "7f3ae4d7-ae84-41e3-ab88-ecca57a218a2";   // jusjohns - 2026 Workspace (web), AJO enabled
 const SURFACE = "web://justintxadobe.github.io/circlek-demo/#challenges";
 const JOIN_EVENT_TYPE = "loyalty.challengeJoin";
+const ACTIONS = "https://280485-circlekloyalty-stage.adobeioruntime.net/api/v1/web/circlek";   // App Builder actions
+let JOINED = localStorage.getItem("joined:"+(new URLSearchParams(location.search).get("lid")||"CK-LOY-2080415A4C"))==="1";
 const qs = new URLSearchParams(location.search);
 const LOYALTY_ID = qs.get("lid") || "CK-LOY-2080415A4C";            // Jason Garcia (demo); override with ?lid=
 if (qs.get("name")) document.getElementById("memberName").textContent = qs.get("name");
@@ -239,12 +241,14 @@ function cardContent(item){
 function renderCards(){
   const root = document.getElementById("liveCards"); root.innerHTML = "";
   PROPS.forEach(p => (p.items||[]).forEach(item => {
-    const c = cardContent(item); const joined = localStorage.getItem("joined:"+LOYALTY_ID)==="1";
+    const c = cardContent(item); const joined = JOINED;
     const el = document.createElement("div"); el.className="lc";
     el.innerHTML = `${c.img?`<img src="${c.img}" alt="">`:""}<div class="b"><div class="live">● LIVE FROM JOURNEY OPTIMIZER</div>
       <h3>${c.title}</h3><p>${c.body}</p>
       ${c.buttons.map((b,i)=>{ const isJoin=/join/i.test(b.text);
-        return `<button data-i="${i}" class="${isJoin&&joined?"joined":""}">${isJoin&&joined?"✓ Joined":b.text}</button>`;}).join("")}</div>`;
+        // Join shows only before joining; every other button (e.g. View my progress) only after.
+        if (isJoin === joined) return "";
+        return `<button data-i="${i}">${b.text}</button>`;}).join("")}</div>`;
     el.querySelectorAll("button").forEach(btn => btn.onclick = () => clickButton(p, c.buttons[+btn.dataset.i], btn));
     root.appendChild(el);
   }));
@@ -257,12 +261,20 @@ function clickButton(p, b, btn){
   alloy("sendEvent",{ xdm: interact });
   if (/join/i.test(b.text)) {
     // This event triggers the "Fuel + Store – Join" journey, whose custom action calls the challenge sign-up API.
-    alloy("sendEvent",{ xdm:{ eventType: JOIN_EVENT_TYPE, identityMap: identity(), web:{webPageDetails:{name:"Join: Fuel + Store"}} } })
-      .then(()=>{ localStorage.setItem("joined:"+LOYALTY_ID,"1"); btn.textContent="✓ Joined"; btn.classList.add("joined"); toast("You're in! Fuel + Store challenge joined."); });
+    btn.disabled = true; btn.textContent = "Joining…";
+    fetch(ACTIONS+"/loyalty-join",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ lid: LOYALTY_ID }) })
+      .then(r => r.json()).then(j => {
+        if (!j.joined) throw new Error(JSON.stringify(j));
+        JOINED = true; localStorage.setItem("joined:"+LOYALTY_ID,"1"); renderCards(); toast("You're in! Fuel + Store challenge joined.");
+      }).catch(e => { console.warn("Join failed:", e); btn.disabled=false; btn.textContent=b.text; toast("Couldn't join right now — try again."); });
   } else if (b.url) { location.href = b.url; }
 }
 
-loadCards();
+// Real sign-up status from Journey Optimizer (via App Builder), then load cards
+fetch(ACTIONS+"/loyalty-status?lid="+encodeURIComponent(LOYALTY_ID))
+  .then(r => r.json()).then(j => { if (typeof j.joined === "boolean") { JOINED = j.joined; localStorage.setItem("joined:"+LOYALTY_ID, j.joined?"1":"0"); } })
+  .catch(e => console.warn("Status lookup failed, using local state:", e))
+  .finally(loadCards);
 </script>
 </body>
 </html>
