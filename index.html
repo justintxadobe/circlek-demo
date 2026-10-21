@@ -57,6 +57,12 @@
   .toast{position:absolute;left:16px;right:16px;top:60px;background:rgba(30,30,30,.92);color:#fff;border-radius:16px;padding:12px 14px;font-size:13px;
          transform:translateY(-150%);transition:transform .4s;z-index:6;display:flex;gap:10px;align-items:center}
   .toast.show{transform:translateY(0)}
+  .lc{background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.06);margin-bottom:16px}
+  .lc img{width:100%;display:block;max-height:180px;object-fit:cover}
+  .lc .b{padding:14px 16px}.lc h3{margin:0 0 6px;font-size:17px}.lc p{margin:0 0 12px;font-size:14px;color:#444}
+  .lc button{background:#DA291C;color:#fff;border:0;border-radius:22px;padding:10px 18px;font-weight:700;font-size:14px;margin-right:8px;cursor:pointer}
+  .lc button.joined{background:#2e7d32}
+  .live{font-size:11px;color:#2e7d32;font-weight:700;letter-spacing:.04em;margin:0 0 6px}
 </style>
 </head>
 <body>
@@ -79,12 +85,13 @@
         <div style="font-size:22px">🔔</div>
       </div>
       <div class="member">
-        <div><small>Member</small><b>Alex R.</b></div>
+        <div><small>Member</small><b id="memberName">Jason G.</b></div>
         <div style="text-align:right"><small>Visits this month</small><b id="visits">3</b> / 5</div>
       </div>
     </div>
 
     <div class="content">
+      <div id="liveCards"></div>
       <div class="section-title">Your Challenges</div>
       <div id="challenges"></div>
     </div>
@@ -180,7 +187,7 @@ function toast(msg){
   clearTimeout(window._tt); window._tt = setTimeout(()=>t.classList.remove("show"), 2600);
 }
 
-function resetDemo(){ state = {}; render(); }
+function resetDemo(){ state = {}; localStorage.removeItem("joined:"+LOYALTY_ID); render(); renderCards(); }
 
 /* Optional live hook: with the Adobe Web SDK (alloy) configured for a content-card
    or code-based surface, map returned propositions into CHALLENGES and re-render.
@@ -192,6 +199,70 @@ function resetDemo(){ state = {}; render(); }
 
 setInterval(()=>{ const d=new Date(); document.getElementById("clock").textContent=d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}).replace(/ [AP]M/,""); },1000);
 render();
+
+/* ---------- LIVE: Adobe Web SDK + Journey Optimizer content cards ---------- */
+const ORG_ID = "120A56765E16E7BE0A495FEB@AdobeOrg";
+const DATASTREAM_ID = "7f3ae4d7-ae84-41e3-ab88-ecca57a218a2";   // jusjohns - 2026 Workspace (web), AJO enabled
+const SURFACE = "web://justintxadobe.github.io/circlek-demo/#challenges";
+const JOIN_EVENT_TYPE = "loyalty.challengeJoin";
+const qs = new URLSearchParams(location.search);
+const LOYALTY_ID = qs.get("lid") || "CK-LOY-2080415A4C";            // Jason Garcia (demo); override with ?lid=
+if (qs.get("name")) document.getElementById("memberName").textContent = qs.get("name");
+
+!function(n,o){o.forEach(function(o){n[o]||((n.__alloyNS=n.__alloyNS||[]).push(o),n[o]=function(){var u=arguments;return new Promise(function(i,l){n[o].q.push([i,l,u])})},n[o].q=[])})}(window,["alloy"]);
+const sdk=document.createElement("script"); sdk.async=true; sdk.src="https://cdn1.adoberesources.net/alloy/2.24.0/alloy.min.js"; document.head.appendChild(sdk);
+
+alloy("configure",{ datastreamId: DATASTREAM_ID, orgId: ORG_ID, defaultConsent: "in", debugEnabled: qs.has("debug") });
+
+const identity = () => ({ loyaltyId: [{ id: LOYALTY_ID, authenticatedState: "authenticated", primary: true }] });
+let PROPS = [];
+
+function loadCards(){
+  return alloy("sendEvent",{
+    xdm:{ eventType:"web.webpagedetails.pageViews", identityMap: identity(), web:{webPageDetails:{name:"Circle K Challenges", URL: location.href}} },
+    personalization:{ surfaces:[SURFACE] }
+  }).then(r => {
+    PROPS = (r.propositions||[]).filter(p => (p.scope||"").indexOf("challenges")>=0 || (p.items||[]).some(i => /content-card/.test(i.schema||"")));
+    renderCards();
+    if (PROPS.length) alloy("sendEvent",{ xdm:{ eventType:"decisioning.propositionDisplay", identityMap: identity(),
+      _experience:{decisioning:{ propositions: PROPS.map(p=>({id:p.id,scope:p.scope,scopeDetails:p.scopeDetails})), propositionEventType:{display:1} }} }});
+  }).catch(e => console.warn("Web SDK:", e));
+}
+
+function cardContent(item){
+  const d = item.data || {}; const c = d.content || d;
+  const txt = v => (v && typeof v==="object") ? (v.content||"") : (v||"");
+  return { title: txt(c.title), body: txt(c.body), img: c.imageUrl || (c.image&&c.image.url) || "", url: c.actionUrl || "",
+           buttons: (c.buttons||[]).map(b=>({ text: txt(b.text), url: b.actionUrl||"", id: b.interactId||b.id||"" })) };
+}
+
+function renderCards(){
+  const root = document.getElementById("liveCards"); root.innerHTML = "";
+  PROPS.forEach(p => (p.items||[]).forEach(item => {
+    const c = cardContent(item); const joined = localStorage.getItem("joined:"+LOYALTY_ID)==="1";
+    const el = document.createElement("div"); el.className="lc";
+    el.innerHTML = `${c.img?`<img src="${c.img}" alt="">`:""}<div class="b"><div class="live">● LIVE FROM JOURNEY OPTIMIZER</div>
+      <h3>${c.title}</h3><p>${c.body}</p>
+      ${c.buttons.map((b,i)=>{ const isJoin=/join/i.test(b.text);
+        return `<button data-i="${i}" class="${isJoin&&joined?"joined":""}">${isJoin&&joined?"✓ Joined":b.text}</button>`;}).join("")}</div>`;
+    el.querySelectorAll("button").forEach(btn => btn.onclick = () => clickButton(p, c.buttons[+btn.dataset.i], btn));
+    root.appendChild(el);
+  }));
+}
+
+function clickButton(p, b, btn){
+  const interact = { eventType:"decisioning.propositionInteract", identityMap: identity(),
+    _experience:{decisioning:{ propositions:[{id:p.id,scope:p.scope,scopeDetails:p.scopeDetails}], propositionEventType:{interact:1},
+      propositionAction:{ id: b.id || b.text, label: b.text } }} };
+  alloy("sendEvent",{ xdm: interact });
+  if (/join/i.test(b.text)) {
+    // This event triggers the "Fuel + Store – Join" journey, whose custom action calls the challenge sign-up API.
+    alloy("sendEvent",{ xdm:{ eventType: JOIN_EVENT_TYPE, identityMap: identity(), web:{webPageDetails:{name:"Join: Fuel + Store"}} } })
+      .then(()=>{ localStorage.setItem("joined:"+LOYALTY_ID,"1"); btn.textContent="✓ Joined"; btn.classList.add("joined"); toast("You're in! Fuel + Store challenge joined."); });
+  } else if (b.url) { location.href = b.url; }
+}
+
+loadCards();
 </script>
 </body>
 </html>
