@@ -62,6 +62,9 @@
   .lc .b{padding:14px 16px}.lc h3{margin:0 0 6px;font-size:17px}.lc p{margin:0 0 12px;font-size:14px;color:#444}
   .lc button{background:#DA291C;color:#fff;border:0;border-radius:22px;padding:10px 18px;font-weight:700;font-size:14px;margin-right:8px;cursor:pointer}
   .lc button.joined{background:#2e7d32}
+  .pg{border-top:1px solid #eee;margin-top:6px;padding-top:12px}.pg .row{display:flex;justify-content:space-between;font-size:13px;color:#444;margin:10px 0 4px}
+  .pg .bar{height:10px;border-radius:6px;background:#eee;border:1px solid #ccc;overflow:hidden}.pg .bar i{display:block;height:100%;background:#DA291C}
+  .pg .sum{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:14px}.pg .sum b{font-size:18px}
   .live{font-size:11px;color:#2e7d32;font-weight:700;letter-spacing:.04em;margin:0 0 6px}
 </style>
 </head>
@@ -245,15 +248,38 @@ function renderCards(){
     const el = document.createElement("div"); el.className="lc";
     el.innerHTML = `${c.img?`<img src="${c.img}" alt="">`:""}<div class="b"><div class="live">● LIVE FROM JOURNEY OPTIMIZER</div>
       <h3>${c.title}</h3><p>${c.body}</p>
-      ${c.buttons.map((b,i)=>{ const isJoin=/join/i.test(b.text);
-        // Join shows only before joining; every other button (e.g. View my progress) only after.
-        if (isJoin === joined) return "";
-        return `<button data-i="${i}">${b.text}</button>`;}).join("")}</div>`;
+      ${joined ? progressHtml() : c.buttons.map((b,i)=> /join/i.test(b.text) ? `<button data-i="${i}">${b.text}</button>` : "").join("")}</div>`;
     el.querySelectorAll("button").forEach(btn => btn.onclick = () => clickButton(p, c.buttons[+btn.dataset.i], btn));
     root.appendChild(el);
   }));
 }
 
+
+// ---- Challenge progress (shown in place of the Join button once joined) ----
+let STATUS = null;
+const TASK_GOALS = [{name:"Fuel Up", goal:5, unit:"gallons"}, {name:"Hot Food", goal:1, unit:"item"}];
+const END_LABEL = "11/03/2026";
+function num(o, keys){ for (const k of keys) if (o && typeof o[k] === "number") return o[k]; return null; }
+function taskProgress(){
+  const ch = STATUS && STATUS.challenge; const list = ch && (ch.tasks || ch.taskList || ch.taskStates || []);
+  return TASK_GOALS.map((t, i) => {
+    const s = (Array.isArray(list) && (list.find(x => (x.taskName||x.name) === t.name) || list[i])) || {};
+    const goal = num(s, ["qtyMin","goal","target","required"]) ?? t.goal;
+    const have = num(s, ["qty","progress","current","count","completedQty","value"]) ?? ((s.completed||s.isCompleted||/complete/i.test(s.state||s.status||"")) ? goal : 0);
+    return { ...t, goal, have: Math.min(have, goal) };
+  });
+}
+function progressHtml(){
+  const ts = taskProgress(); const done = ts.filter(t => t.have >= t.goal).length;
+  const complete = done === ts.length || /complete/i.test((STATUS && STATUS.challenge && (STATUS.challenge.state||STATUS.challenge.status)) || "");
+  return `<div class="pg">${ts.map(t => `<div class="row"><span>${t.name}</span><span>${t.have} of ${t.goal} ${t.unit}</span></div>
+    <div class="bar"><i style="width:${Math.round(100*t.have/t.goal)}%"></i></div>`).join("")}
+    <div class="sum"><span>${complete ? "Completed! Reward unlocked." : `${ts.length-done} of ${ts.length} tasks to go · ends ${END_LABEL}`}</span><b>+3 Visits</b></div></div>`;
+}
+function refreshStatus(){
+  return fetch(ACTIONS+"/loyalty-status?lid="+encodeURIComponent(LOYALTY_ID)).then(r => r.json())
+    .then(j => { STATUS = j; if (typeof j.joined === "boolean") { JOINED = j.joined; localStorage.setItem("joined:"+LOYALTY_ID, j.joined?"1":"0"); } console.log("Challenge status:", j); });
+}
 function clickButton(p, b, btn){
   const interact = { eventType:"decisioning.propositionInteract", identityMap: identity(),
     _experience:{decisioning:{ propositions:[{id:p.id,scope:p.scope,scopeDetails:p.scopeDetails}], propositionEventType:{interact:1},
@@ -265,16 +291,17 @@ function clickButton(p, b, btn){
     fetch(ACTIONS+"/loyalty-join",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ lid: LOYALTY_ID }) })
       .then(r => r.json()).then(j => {
         if (!j.joined) throw new Error(JSON.stringify(j));
-        JOINED = true; localStorage.setItem("joined:"+LOYALTY_ID,"1"); renderCards(); toast("You're in! Fuel + Store challenge joined.");
+        JOINED = true; localStorage.setItem("joined:"+LOYALTY_ID,"1"); renderCards(); refreshStatus().then(renderCards).catch(()=>{}); toast("You're in! Fuel + Store challenge joined.");
       }).catch(e => { console.warn("Join failed:", e); btn.disabled=false; btn.textContent=b.text; toast("Couldn't join right now — try again."); });
   } else if (b.url) { location.href = b.url; }
 }
 
 // Real sign-up status from Journey Optimizer (via App Builder), then load cards
-fetch(ACTIONS+"/loyalty-status?lid="+encodeURIComponent(LOYALTY_ID))
-  .then(r => r.json()).then(j => { if (typeof j.joined === "boolean") { JOINED = j.joined; localStorage.setItem("joined:"+LOYALTY_ID, j.joined?"1":"0"); } })
+refreshStatus()
   .catch(e => console.warn("Status lookup failed, using local state:", e))
   .finally(loadCards);
+// Re-check progress every 30s so test purchases show up without a reload
+setInterval(() => { if (JOINED) refreshStatus().then(renderCards).catch(()=>{}); }, 30000);
 </script>
 </body>
 </html>
