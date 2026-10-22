@@ -66,6 +66,16 @@
   .pg .bar{height:10px;border-radius:6px;background:#eee;border:1px solid #ccc;overflow:hidden}.pg .bar i{display:block;height:100%;background:#DA291C}
   .pg .sum{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:14px}.pg .sum b{font-size:18px}
   .live{font-size:11px;color:#2e7d32;font-weight:700;letter-spacing:.04em;margin:0 0 6px}
+  .cp{margin-top:22px;background:#2a2a2c;border:1px solid #3a3a3c;border-radius:16px;padding:16px 18px;max-width:440px}
+  .cp h3{margin:0 0 4px;font-size:15px;color:#fff}.cp .sub{margin:0 0 12px;font-size:12px;color:#aaa}
+  .cp .grp{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#F68B1F;margin:12px 0 6px;font-weight:700}
+  .cp .btns{display:flex;flex-wrap:wrap;gap:8px}
+  .cp .btns button{background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer}
+  .cp .btns button:hover{border-color:#DA291C}.cp .btns button.no{color:#bbb;border-style:dashed}
+  .cp .btns button:disabled{opacity:.5;cursor:wait}
+  .cp .st{margin-top:14px;border-top:1px solid #3a3a3c;padding-top:10px;font-size:13px;color:#ddd}
+  .cp .st div{display:flex;justify-content:space-between;margin:4px 0}.cp .ok{color:#6fcf73}.cp .wait{color:#F68B1F}
+  .cp .log{margin-top:8px;font-size:12px;color:#999;max-height:90px;overflow:auto}
 </style>
 </head>
 <body>
@@ -73,8 +83,29 @@
 <div class="pitch">
   <h1>Fuel up. Step inside. <span>Earn more.</span></h1>
   <p>This is how a Circle K Inner Circle member sees a Journey Optimizer loyalty challenge in the app: live tasks, progress and the reward they're working toward.</p>
-  <p class="hint">Demo mode: tap a task on the phone to simulate a purchase. Completing both issues 3 bonus Visits.</p>
+  <p class="hint">Demo mode: use the control panel to simulate purchases. Completing both tasks issues 3 bonus Visits.</p>
   <button onclick="resetDemo()">Reset demo</button>
+  <div class="cp">
+    <h3>Demo control panel</h3>
+    <p class="sub">Simulates a Circle K POS purchase for this member. Each tap streams a real purchase event to Experience Platform.</p>
+    <div class="grp">Fuel Up · 5+ gallons</div>
+    <div class="btns">
+      <button onclick="buy([{sku:'CK-FUEL-REG',qty:6}],'6 gal Regular')">6 gal Regular</button>
+      <button onclick="buy([{sku:'CK-FUEL-PRM',qty:8}],'8 gal Premium')">8 gal Premium</button>
+      <button class="no" onclick="buy([{sku:'CK-FUEL-REG',qty:3}],'3 gal Regular')">3 gal Regular (too few)</button>
+    </div>
+    <div class="grp">Hot Food</div>
+    <div class="btns">
+      <button onclick="buy([{sku:'CK-HF-HD',qty:1}],'Hot dog')">Hot dog</button>
+      <button onclick="buy([{sku:'CK-HF-PZ',qty:1}],'Pizza slice')">Pizza slice</button>
+      <button onclick="buy([{sku:'CK-HF-TQ',qty:2}],'2 Taquitos')">2 Taquitos</button>
+      <button class="no" onclick="buy([{sku:'CK-SNK-CHIP',qty:1}],'Chips')">Chips (not eligible)</button>
+    </div>
+    <div class="grp">Combo · one visit</div>
+    <div class="btns"><button onclick="buy([{sku:'CK-FUEL-REG',qty:6},{sku:'CK-HF-HD',qty:1}],'6 gal + hot dog')">6 gal Regular + hot dog</button></div>
+    <div class="st" id="cpStatus"><div><span>Journey Optimizer status</span><span class="wait">checking…</span></div></div>
+    <div class="log" id="cpLog"></div>
+  </div>
 </div>
 
 <div class="phone">
@@ -241,10 +272,11 @@ function cardContent(item){
            buttons: (c.buttons||[]).map(b=>({ text: txt(b.text), url: b.actionUrl||"", id: b.interactId||b.id||"" })) };
 }
 
-function renderCards(){
+function renderCards(){ setTimeout(cpStatus,0);
   const root = document.getElementById("liveCards"); root.innerHTML = "";
   PROPS.forEach(p => (p.items||[]).forEach(item => {
     const c = cardContent(item); const joined = JOINED;
+    if (!c.title && !c.body && !c.img) return;   // skip empty/placeholder cards
     const el = document.createElement("div"); el.className="lc";
     el.innerHTML = `${c.img?`<img src="${c.img}" alt="">`:""}<div class="b"><div class="live">● LIVE FROM JOURNEY OPTIMIZER</div>
       <h3>${c.title}</h3><p>${c.body}</p>
@@ -278,7 +310,30 @@ function progressHtml(){
 }
 function refreshStatus(){
   return fetch(ACTIONS+"/loyalty-status?lid="+encodeURIComponent(LOYALTY_ID)).then(r => r.json())
-    .then(j => { STATUS = j; if (typeof j.joined === "boolean") { JOINED = j.joined; localStorage.setItem("joined:"+LOYALTY_ID, j.joined?"1":"0"); } console.log("Challenge status:", j); });
+    .then(j => { STATUS = j; if (j.joined === true) { JOINED = true; localStorage.setItem("joined:"+LOYALTY_ID,"1"); } console.log("Challenge status:", j); });
+}
+
+// ---- Demo control panel: purchases go through the App Builder action (server-side) ----
+const CRMID = qs.get("crmid") || "";
+function cpLog(msg){ const el=document.getElementById("cpLog"); if(!el) return; const t=new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit",second:"2-digit"}); el.innerHTML = `<div>${t} · ${msg}</div>` + el.innerHTML; }
+function cpStatus(){
+  const el=document.getElementById("cpStatus"); if(!el) return;
+  if (!JOINED) { el.innerHTML = `<div><span>Member</span><span class="wait">not joined yet</span></div>`; return; }
+  const ts = taskProgress(); const all = ts.every(t => t.done);
+  el.innerHTML = ts.map(t => `<div><span>${t.name}</span><span class="${t.done?'ok':'wait'}">${t.done?'complete':'incomplete'}</span></div>`).join("")
+    + `<div><span>Reward (+3 Visits)</span><span class="${all?'ok':'wait'}">${all?'issued':'pending'}</span></div>`;
+}
+function buy(items, label){
+  if (!JOINED) { toast("Join the challenge first."); cpLog("Join the challenge first"); return; }
+  const btns=[...document.querySelectorAll(".cp .btns button")]; btns.forEach(b=>b.disabled=true);
+  cpLog(`Sending: ${label}…`);
+  fetch(ACTIONS+"/loyalty-purchase",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ lid: LOYALTY_ID, crmid: CRMID || undefined, items }) })
+    .then(r => r.json()).then(j => {
+      if (!j.sent) throw new Error(JSON.stringify(j));
+      cpLog(`Purchase sent (${j.orderId}). Waiting for Journey Optimizer…`); toast(`Purchase: ${label}`);
+      [15000, 30000, 60000].forEach(ms => setTimeout(() => refreshStatus().then(()=>{ renderCards(); cpStatus(); }).catch(()=>{}), ms));
+    }).catch(e => { console.warn("Purchase failed:", e); cpLog("Purchase failed — see console"); toast("Purchase didn't go through."); })
+    .finally(() => btns.forEach(b=>b.disabled=false));
 }
 function clickButton(p, b, btn){
   const interact = { eventType:"decisioning.propositionInteract", identityMap: identity(),
