@@ -297,7 +297,8 @@ function taskProgress(){
   return TASK_GOALS.map((t, i) => {
     const s = list.find(x => x.taskName === t.name) || list[i] || {};
     const goal = (s.variables && s.variables.qtyMin) || t.goal;
-    const done = s.taskState === "complete" || s.taskState === "completed";
+    // LMS task states seen: "incomplete" → "sent" (task done, reward sent). Treat anything past incomplete as done.
+    const done = ["complete","completed","sent","rewarded","fulfilled"].includes(String(s.taskState||"").toLowerCase());
     return { ...t, goal, done, have: done ? goal : 0 };
   });
 }
