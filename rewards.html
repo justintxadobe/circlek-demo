@@ -44,13 +44,14 @@
     <div><span id="upd"></span><button onclick="load()">Refresh</button><button onclick="clearFeed()">Clear feed</button></div>
   </div>
   <table>
-    <thead><tr><th>Received</th><th>Member (Loyalty ID)</th><th>Challenge</th><th>Award</th><th>Sent to Platform</th><th>Payload</th></tr></thead>
+    <thead><tr><th>Received</th><th>Member</th><th>Challenge</th><th>Award</th><th>Sent to Platform</th><th>Payload</th></tr></thead>
     <tbody id="rows"><tr><td colspan="6" class="empty">No awards yet. Complete a challenge in the member app.</td></tr></tbody>
   </table>
 </main>
 <script>
 const ACTIONS = "https://280485-circlekloyalty-stage.adobeioruntime.net/api/v1/web/circlek";
 let seen = new Set(), first = true;
+const NAMES = {"CK-LOY-2080415A4C":"Jason Garcia","CK-LOY-0DBDEEEA30":"Stephen Taylor","CK-LOY-E804009673":"Rebecca Clark","CK-LOY-8FC99E8792":"Charles Morris","CK-LOY-DD0C7045A0":"Anthony Lee","CK-LOY-89D4DC72E9":"Matthew Green","CK-LOY-C82851D88B":"Dorothy Reyes","CK-LOY-C6C239E318":"Alexander Murphy","CK-LOY-B4410914D6":"Nancy Garcia","CK-LOY-58A584DC3F":"Katherine Roberts","CK-LOY-61818A6FBE":"Nancy Adams"};
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function render(list){
   document.getElementById("kCount").textContent = list.length;
@@ -62,7 +63,7 @@ function render(list){
   rows.innerHTML = list.map(r => {
     const fresh = !first && !seen.has(r.id);
     const fw = !r.forwarded ? `<span style="color:#888">off</span>` : r.forwarded === "ok" ? `<span class="ok">✓ sent</span>` : `<span class="bad">${esc(r.forwarded)}</span>`;
-    return `<tr class="${fresh?'new':''}"><td>${new Date(r.receivedAt).toLocaleString()}</td><td>${esc(r.profileId||"unknown")}</td>
+    return `<tr class="${fresh?'new':''}"><td>${new Date(r.receivedAt).toLocaleString()}</td><td>${NAMES[r.profileId] ? `<b>${esc(NAMES[r.profileId])}</b><br><small style="color:#999">${esc(r.profileId)}</small>` : esc(r.profileId||"unknown")}</td>
       <td>${esc(r.challenge||"—")}</td><td class="amt">+${esc(r.value??"?")} ${esc(r.denomination||"")}</td><td>${fw}</td>
       <td><details><summary>view</summary><pre>${esc(JSON.stringify(r.payload,null,2))}</pre></details></td></tr>`;
   }).join("");
