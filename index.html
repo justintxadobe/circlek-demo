@@ -261,18 +261,18 @@ const TASK_GOALS = [{name:"Fuel Up", goal:5, unit:"gallons"}, {name:"Hot Food", 
 const END_LABEL = "11/03/2026";
 function num(o, keys){ for (const k of keys) if (o && typeof o[k] === "number") return o[k]; return null; }
 function taskProgress(){
-  const ch = STATUS && STATUS.challenge; const list = ch && (ch.tasks || ch.taskList || ch.taskStates || []);
+  const list = (STATUS && STATUS.challenge && STATUS.challenge.tasks) || [];
   return TASK_GOALS.map((t, i) => {
-    const s = (Array.isArray(list) && (list.find(x => (x.taskName||x.name) === t.name) || list[i])) || {};
-    const goal = num(s, ["qtyMin","goal","target","required"]) ?? t.goal;
-    const have = num(s, ["qty","progress","current","count","completedQty","value"]) ?? ((s.completed||s.isCompleted||/complete/i.test(s.state||s.status||"")) ? goal : 0);
-    return { ...t, goal, have: Math.min(have, goal) };
+    const s = list.find(x => x.taskName === t.name) || list[i] || {};
+    const goal = (s.variables && s.variables.qtyMin) || t.goal;
+    const done = s.taskState === "complete" || s.taskState === "completed";
+    return { ...t, goal, done, have: done ? goal : 0 };
   });
 }
 function progressHtml(){
-  const ts = taskProgress(); const done = ts.filter(t => t.have >= t.goal).length;
-  const complete = done === ts.length || /complete/i.test((STATUS && STATUS.challenge && (STATUS.challenge.state||STATUS.challenge.status)) || "");
-  return `<div class="pg">${ts.map(t => `<div class="row"><span>${t.name}</span><span>${t.have} of ${t.goal} ${t.unit}</span></div>
+  const ts = taskProgress(); const done = ts.filter(t => t.done).length;
+  const complete = done === ts.length;
+  return `<div class="pg">${ts.map(t => `<div class="row"><span>${t.name}</span><span>${t.done ? "Done ✓" : `${t.goal}+ ${t.unit} to go`}</span></div>
     <div class="bar"><i style="width:${Math.round(100*t.have/t.goal)}%"></i></div>`).join("")}
     <div class="sum"><span>${complete ? "Completed! Reward unlocked." : `${ts.length-done} of ${ts.length} tasks to go · ends ${END_LABEL}`}</span><b>+3 Visits</b></div></div>`;
 }
