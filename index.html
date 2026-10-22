@@ -85,6 +85,7 @@
   <p>This is how a Circle K Inner Circle member sees a Journey Optimizer loyalty challenge in the app: live tasks, progress and the reward they're working toward.</p>
   <p class="hint">Demo mode: use the control panel to simulate purchases. Completing both tasks issues 3 bonus Visits.</p>
   <button onclick="resetDemo()">Reset demo</button>
+  <a href="rewards.html" target="_blank" style="display:inline-block;margin-left:8px;color:#F68B1F;font-size:13px;text-decoration:none;border:1px solid #F68B1F;border-radius:8px;padding:7px 12px">Open rewards provider dashboard ↗</a>
   <div class="cp">
     <h3>Demo control panel</h3>
     <p class="sub">Simulates a Circle K POS purchase for this member. Each tap streams a real purchase event to Experience Platform.</p>
@@ -126,8 +127,8 @@
 
     <div class="content">
       <div id="liveCards"></div>
-      <div class="section-title">Your Challenges</div>
-      <div id="challenges"></div>
+      <div class="section-title" style="display:none">Your Challenges</div>
+      <div id="challenges" style="display:none"></div>
     </div>
 
     <div class="tabbar">
@@ -284,6 +285,16 @@ function renderCards(){ setTimeout(cpStatus,0);
     el.querySelectorAll("button").forEach(btn => btn.onclick = () => clickButton(p, c.buttons[+btn.dataset.i], btn));
     root.appendChild(el);
   }));
+  // Once a member finishes, Journey Optimizer stops sending the card. Keep showing their result from challenge status.
+  if (!root.children.length && JOINED && STATUS && STATUS.challenge) {
+    const el = document.createElement("div"); el.className="lc";
+    el.innerHTML = `<div class="b"><div class="live">● LIVE FROM JOURNEY OPTIMIZER</div>
+      <h3>Fuel + Store</h3><p>Fuel up and grab a hot food item to earn 3 bonus Visits.</p>${progressHtml()}</div>`;
+    root.appendChild(el);
+  }
+  // Visits counter: +3 once the challenge reward is issued
+  const v = document.getElementById("visits");
+  if (v) v.textContent = (JOINED && STATUS && taskProgress().every(t => t.done)) ? "5" : "2";
 }
 
 

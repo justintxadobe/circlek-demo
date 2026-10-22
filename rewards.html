@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Circle K Rewards Provider – Live Awards</title>
+<style>
+  :root{--red:#DA291C;--orange:#F68B1F;--bg:#1c1c1e;--card:#2a2a2c;--line:#3a3a3c}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:#eee;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;justify-content:space-between;padding:20px 32px;border-bottom:4px solid var(--red);background:#111}
+  header h1{margin:0;font-size:20px}header h1 span{color:var(--orange)}
+  header a{color:#ccc;font-size:13px;text-decoration:none;border:1px solid #555;border-radius:8px;padding:6px 12px}
+  main{padding:24px 32px;max-width:1200px;margin:0 auto}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .kpi .l{font-size:12px;color:#aaa;text-transform:uppercase;letter-spacing:.06em}.kpi .v{font-size:30px;font-weight:700;margin-top:6px}
+  .bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:13px;color:#aaa}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#6fcf73;margin-right:6px;animation:p 1.6s infinite}
+  @keyframes p{50%{opacity:.3}}
+  .bar button{background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:6px 12px;cursor:pointer;margin-left:8px}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:top}
+  th{background:#232325;color:#aaa;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  tr.new td{animation:hl 3s ease-out}@keyframes hl{from{background:rgba(246,139,31,.35)}to{background:transparent}}
+  .amt{color:var(--orange);font-weight:700}.ok{color:#6fcf73}.bad{color:#ff7b72}
+  details summary{cursor:pointer;color:#aaa;font-size:12px}pre{white-space:pre-wrap;font-size:11px;color:#bbb;max-width:420px}
+  .empty{padding:40px;text-align:center;color:#888}
+</style>
+</head>
+<body>
+<header>
+  <h1>Circle K <span>Rewards Provider</span> · Live awards</h1>
+  <a href="./">← Back to member app</a>
+</header>
+<main>
+  <div class="kpis">
+    <div class="kpi"><div class="l">Awards received</div><div class="v" id="kCount">0</div></div>
+    <div class="kpi"><div class="l">Visits issued</div><div class="v" id="kVisits">0</div></div>
+    <div class="kpi"><div class="l">Members rewarded</div><div class="v" id="kMembers">0</div></div>
+    <div class="kpi"><div class="l">Last award</div><div class="v" id="kLast" style="font-size:20px">—</div></div>
+  </div>
+  <div class="bar">
+    <div><span class="dot"></span>Listening for Journey Optimizer reward calls · refreshes every 5s</div>
+    <div><span id="upd"></span><button onclick="load()">Refresh</button><button onclick="clearFeed()">Clear feed</button></div>
+  </div>
+  <table>
+    <thead><tr><th>Received</th><th>Member (Loyalty ID)</th><th>Challenge</th><th>Award</th><th>Sent to Platform</th><th>Payload</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="6" class="empty">No awards yet. Complete a challenge in the member app.</td></tr></tbody>
+  </table>
+</main>
+<script>
+const ACTIONS = "https://280485-circlekloyalty-stage.adobeioruntime.net/api/v1/web/circlek";
+let seen = new Set(), first = true;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function render(list){
+  document.getElementById("kCount").textContent = list.length;
+  document.getElementById("kVisits").textContent = list.reduce((s,r)=>s+(Number(r.value)||0),0);
+  document.getElementById("kMembers").textContent = new Set(list.map(r=>r.profileId).filter(Boolean)).size;
+  document.getElementById("kLast").textContent = list[0] ? new Date(list[0].receivedAt).toLocaleTimeString() : "—";
+  const rows = document.getElementById("rows");
+  if (!list.length) { rows.innerHTML = `<tr><td colspan="6" class="empty">No awards yet. Complete a challenge in the member app.</td></tr>`; return; }
+  rows.innerHTML = list.map(r => {
+    const fresh = !first && !seen.has(r.id);
+    const fw = !r.forwarded ? `<span style="color:#888">off</span>` : r.forwarded === "ok" ? `<span class="ok">✓ sent</span>` : `<span class="bad">${esc(r.forwarded)}</span>`;
+    return `<tr class="${fresh?'new':''}"><td>${new Date(r.receivedAt).toLocaleString()}</td><td>${esc(r.profileId||"unknown")}</td>
+      <td>${esc(r.challenge||"—")}</td><td class="amt">+${esc(r.value??"?")} ${esc(r.denomination||"")}</td><td>${fw}</td>
+      <td><details><summary>view</summary><pre>${esc(JSON.stringify(r.payload,null,2))}</pre></details></td></tr>`;
+  }).join("");
+  list.forEach(r => seen.add(r.id)); first = false;
+}
+function load(){
+  fetch(ACTIONS+"/loyalty-rewards-feed").then(r=>r.json()).then(j=>{
+    render(j.rewards||[]); document.getElementById("upd").textContent = "Updated "+new Date().toLocaleTimeString()+" ";
+  }).catch(e=>{ document.getElementById("upd").textContent = "Feed unavailable "; console.warn(e); });
+}
+function clearFeed(){ if (confirm("Clear all awards from the dashboard?")) fetch(ACTIONS+"/loyalty-rewards-feed?clear=true").then(load); }
+load(); setInterval(load, 5000);
+</script>
+</body>
+</html>
