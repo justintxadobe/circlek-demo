@@ -74,7 +74,7 @@
   .cp .btns button:hover{border-color:#DA291C}.cp .btns button.no{color:#bbb;border-style:dashed}
   .cp .btns button:disabled{opacity:.5;cursor:wait}
   .cp .st{margin-top:14px;border-top:1px solid #3a3a3c;padding-top:10px;font-size:13px;color:#ddd}
-  .cp .st div{display:flex;justify-content:space-between;margin:4px 0}.cp .ok{color:#6fcf73}.cp .wait{color:#F68B1F}
+  .cp .st div{display:flex;justify-content:space-between;margin:4px 0}.cp .ok{color:#6fcf73}.cp .wait{color:#F68B1F}.cp .bad{color:#ff7b72}
   .cp .log{margin-top:8px;font-size:12px;color:#999;max-height:90px;overflow:auto}
 </style>
 </head>
@@ -131,7 +131,7 @@
 
     <div class="content">
       <div id="liveCards"></div>
-      <div class="section-title" style="display:none">Your Challenges</div>
+      <div class="section-title" id="challengesHead" style="display:none">More challenges</div>
       <div id="challenges" style="display:none"></div>
     </div>
 
@@ -146,109 +146,17 @@
 </div>
 
 <script>
-/* Challenge data pulled from Journey Optimizer Loyalty (sandbox jjohnsonsbdev).
-   To go live, replace this with content cards or code-based experience payloads
-   returned by the Web/Mobile SDK. See loadFromSdk() below. */
-const CHALLENGES = [{
-  id: "77f4da20-9b92-4497-b567-a6eb5d016e42",
-  name: "Fuel + Store",
-  desc: "Fuel up and grab a hot food item to earn 3 bonus Visits.",
-  end: "2026-11-04T04:59:59Z",
-  tasksToComplete: 2,
-  reward: { value: 3, denomination: "Visits" },
-  icons: "⛽🌭",
-  tasks: [
-    { name: "Fuel Up",              desc: "Fuel up with 5 gallons or more in a single visit." },
-    { name: "Hot Food",             desc: "Buy a hot food item." }
-  ]
-}];
-
-const BASE_VISITS = 2;
-let state = {};
-
-function daysLeft(iso){ return Math.max(0, Math.ceil((new Date(iso) - new Date()) / 864e5)); }
-
-function render(){
-  const root = document.getElementById("challenges");
-  root.innerHTML = "";
-  let bonus = 0;
-  CHALLENGES.forEach(c => {
-    const done = (state[c.id] || []);
-    const n = done.length, goal = c.tasksToComplete, complete = n >= goal;
-    if (complete) bonus += c.reward.value;
-    const pct = Math.min(100, Math.round(n / goal * 100));
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="hero">
-        <span class="badge">${complete ? "Completed" : "Active · " + daysLeft(c.end) + " days left"}</span>
-        <h2>${c.name}</h2>
-        <div class="icons">${c.icons}</div>
-      </div>
-      <div class="body">
-        <p>${goal===c.tasks.length?"Complete both":"Complete any "+goal+" of "+c.tasks.length} to earn ${c.reward.value} bonus ${c.reward.denomination}.</p>
-        <div class="progress"><div style="width:${pct}%"></div></div>
-        <div class="meta"><span>${Math.min(n,goal)} of ${goal} tasks done</span><span>Ends ${new Date(c.end).toLocaleDateString("en-US",{month:"short",day:"numeric",timeZone:"America/New_York"})}</span></div>
-        <ul class="tasks">
-          ${c.tasks.map((t,i)=>`
-            <li class="${done.includes(i)?"done":""}" onclick="toggle('${c.id}',${i})">
-              <div class="chk">${done.includes(i)?"✓":""}</div>
-              <div><b>${t.name}</b><span>${t.desc}</span></div>
-            </li>`).join("")}
-        </ul>
-        <div class="reward ${complete?"complete":""}">
-          ${complete ? "✅ <b>" + c.reward.value + " bonus " + c.reward.denomination + " added!</b> Your 5-Visit reward is unlocked."
-                     : "🎁 Reward: <b>" + c.reward.value + " bonus " + c.reward.denomination + "</b>, bringing you closer to your 5-Visit reward."}
-        </div>
-      </div>`;
-    root.appendChild(card);
-  });
-  document.getElementById("visits").textContent = BASE_VISITS + bonus;
-}
-
-function toggle(id, i){
-  const c = CHALLENGES.find(x => x.id === id);
-  const before = (state[id] || []).length >= c.tasksToComplete;
-  const list = state[id] = state[id] || [];
-  const k = list.indexOf(i);
-  k >= 0 ? list.splice(k,1) : list.push(i);
-  const after = list.length >= c.tasksToComplete;
-  render();
-  if (k < 0) toast(after && !before
-      ? `Challenge complete! ${c.reward.value} bonus ${c.reward.denomination} added.`
-      : `${c.tasks[i].name} done. ${Math.max(0,c.tasksToComplete-list.length)} to go!`);
-}
-
-function toast(msg){
-  const t = document.getElementById("toast");
-  document.getElementById("toastText").textContent = msg;
-  t.classList.add("show");
-  clearTimeout(window._tt); window._tt = setTimeout(()=>t.classList.remove("show"), 2600);
-}
-
-function resetDemo(){ state = {}; localStorage.removeItem("joined:"+LOYALTY_ID); JOINED=false; render(); renderCards(); }
-
-/* Optional live hook: with the Adobe Web SDK (alloy) configured for a content-card
-   or code-based surface, map returned propositions into CHALLENGES and re-render.
-   function loadFromSdk(){
-     alloy("sendEvent",{ personalization:{ surfaces:["web://circlek.com/app#challenges"] } })
-       .then(r => { // parse r.propositions into CHALLENGES
-         render(); });
-   } */
-
-setInterval(()=>{ const d=new Date(); document.getElementById("clock").textContent=d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}).replace(/ [AP]M/,""); },1000);
-render();
-
-/* ---------- LIVE: Adobe Web SDK + Journey Optimizer content cards ---------- */
+/* Circle K demo – challenges come live from Journey Optimizer Loyalty.
+   1) Challenge list:   App Builder loyalty-status  -> GET ajo/loyalty/challenges/state?pid=<loyaltyId>   (all active challenges, each with its challenge_id)
+   2) Join:             App Builder loyalty-join    -> POST ajo/loyalty/challenges/signup/<challenge_id>
+   3) Marketing card:   Web SDK content cards (surface below), matched to a challenge by name                                   */
 const ORG_ID = "120A56765E16E7BE0A495FEB@AdobeOrg";
 const DATASTREAM_ID = "7f3ae4d7-ae84-41e3-ab88-ecca57a218a2";   // jusjohns - 2026 Workspace (web), AJO enabled
 const SURFACE = "web://justintxadobe.github.io/circlek-demo/#challenges";
-const JOIN_EVENT_TYPE = "loyalty.challengeJoin";
-const ACTIONS = "https://280485-circlekloyalty-stage.adobeioruntime.net/api/v1/web/circlek";   // App Builder actions
-let JOINED = localStorage.getItem("joined:"+(new URLSearchParams(location.search).get("lid")||"CK-LOY-2080415A4C"))==="1";
+const ACTIONS = "https://280485-circlekloyalty-stage.adobeioruntime.net/api/v1/web/circlek";
+const BASE_VISITS = 2;
 const qs = new URLSearchParams(location.search);
-const LOYALTY_ID = qs.get("lid") || "CK-LOY-2080415A4C";            // Jason Garcia (demo); override with ?lid=
-// Demo members: name + CRMID by loyalty ID. Any other member: pass ?name=First%20L.&crmid=...
+const LOYALTY_ID = (qs.get("lid") || "CK-LOY-2080415A4C").toUpperCase();
 const MEMBERS = {
   "CK-LOY-2080415A4C": { name: "Jason G.", full: "Jason Garcia", crmid: "100150" },
   "CK-LOY-0DBDEEEA30": { name: "Stephen T.", full: "Stephen Taylor", crmid: "100151" },
@@ -262,143 +170,183 @@ const MEMBERS = {
   "CK-LOY-58A584DC3F": { name: "Katherine R.", full: "Katherine Roberts", crmid: "100171" },
   "CK-LOY-61818A6FBE": { name: "Nancy A.", full: "Nancy Adams", crmid: "100174" }
 };
-const MEMBER = MEMBERS[LOYALTY_ID.toUpperCase()] || {};
-document.addEventListener("DOMContentLoaded", () => {
-  const el = document.getElementById("memberName");
-  if (el) el.textContent = qs.get("name") || MEMBER.name || LOYALTY_ID;
-  const sel = document.getElementById("memberPick");
-  if (sel) {
-    sel.innerHTML = Object.entries(MEMBERS).map(([lid, m]) =>
-      `<option value="${lid}" ${lid === LOYALTY_ID.toUpperCase() ? "selected" : ""}>${m.full} · ${lid}</option>`).join("")
-      + (MEMBERS[LOYALTY_ID.toUpperCase()] ? "" : `<option selected>${LOYALTY_ID}</option>`);
-    sel.onchange = () => { const u = new URL(location.href); u.search = "?lid=" + encodeURIComponent(sel.value); location.href = u.toString(); };
-  }
-});
-if (qs.get("name")) document.getElementById("memberName").textContent = qs.get("name");
+const MEMBER = MEMBERS[LOYALTY_ID] || {};
+const CRMID = qs.get("crmid") || MEMBER.crmid || "";
 
+let CHALLENGES = [];   // from Journey Optimizer
+let PROPS = [];        // content-card propositions from the Web SDK
+
+/* ---------- helpers ---------- */
+const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const cidOf = c => c.challenge_id || c.challengeId || c.id || c._id;
+const jkey = cid => `joined:${LOYALTY_ID}:${cid}`;
+const isJoined = c => c.optedIn === true || localStorage.getItem(jkey(cidOf(c))) === "1";
+const DONE = ["complete","completed","sent","rewarded","fulfilled"];
+function tasksOf(c){
+  return (c.tasks || []).map(t => {
+    const v = t.variables || {}; const goal = v.qtyMin || (v.spendMin ? "$" + v.spendMin : 1);
+    return { name: t.taskName || t.name || "Task", desc: t.desc || "", goal, done: DONE.includes(String(t.taskState||"").toLowerCase()) };
+  });
+}
+function rewardOf(c){ const r = c.reward || {}; return { value: Number(r.rewardValue || r.value || 0), unit: (r.rewardDefinition && r.rewardDefinition.denomination) || r.denomination || "" }; }
+function needed(c){ const ts = tasksOf(c); return Math.min(c.tasksToComplete || ts.length, ts.length) || ts.length; }
+function isComplete(c){ return !!c.completionDate || tasksOf(c).filter(t => t.done).length >= needed(c); }
+function rewardStatus(c){
+  if (!isComplete(c)) return { label: "pending", cls: "wait" };
+  const st = String(c.state || "").toLowerCase();
+  if (st === "failed") return { label: "delivery failed", cls: "bad" };
+  if (["completed","rewarded","sent","fulfilled","complete"].includes(st)) return { label: "issued", cls: "ok" };
+  return { label: st ? "processing (" + st + ")" : "processing", cls: "wait" };
+}
+const endLabel = c => c.endDate ? new Date(c.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+function daysLeft(c){ return c.endDate ? Math.max(0, Math.ceil((new Date(c.endDate) - new Date()) / 864e5)) : ""; }
+
+function toast(msg){
+  const t = document.getElementById("toast");
+  document.getElementById("toastText").textContent = msg;
+  t.classList.add("show");
+  clearTimeout(window._tt); window._tt = setTimeout(()=>t.classList.remove("show"), 2600);
+}
+
+/* ---------- Journey Optimizer: challenge list + join ---------- */
+function refreshStatus(){
+  return fetch(ACTIONS + "/loyalty-status?lid=" + encodeURIComponent(LOYALTY_ID)).then(r => r.json()).then(j => {
+    CHALLENGES = j.challenges || (j.challenge ? [j.challenge] : []);
+    CHALLENGES.forEach(c => { if (c.optedIn === true) localStorage.setItem(jkey(cidOf(c)), "1"); });
+    console.log("Challenges from Journey Optimizer:", j);
+  });
+}
+function joinChallenge(cid, btn, label){
+  btn.disabled = true; btn.textContent = "Joining…";
+  return fetch(ACTIONS + "/loyalty-join", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lid: LOYALTY_ID, cid }) })
+    .then(r => r.json()).then(j => {
+      if (!j.joined) throw new Error(JSON.stringify(j));
+      localStorage.setItem(jkey(cid), "1");
+      const c = CHALLENGES.find(x => cidOf(x) === cid);
+      toast(`You're in! ${c ? c.name : "Challenge"} joined.`);
+      renderAll(); refreshStatus().then(renderAll).catch(()=>{});
+    }).catch(e => { console.warn("Join failed:", e); btn.disabled = false; btn.textContent = label; toast("Couldn't join right now. Try again."); });
+}
+
+/* ---------- rendering ---------- */
+function progressHtml(c){
+  const ts = tasksOf(c); const n = ts.filter(t => t.done).length; const need = needed(c); const r = rewardOf(c); const rs = rewardStatus(c);
+  return `<div class="pg">${ts.map(t => `<div class="row"><span>${esc(t.name)}</span><span>${t.done ? "Done ✓" : esc(t.goal) + " to go"}</span></div>
+    <div class="bar"><i style="width:${t.done ? 100 : 0}%"></i></div>`).join("")}
+    <div class="sum"><span>${isComplete(c) ? (rs.cls === "bad" ? "Completed. Reward delivery failed." : "Completed! Reward unlocked.")
+      : `${Math.max(0, need - n)} of ${need} tasks to go · ends ${endLabel(c)}`}</span><b>+${r.value} ${esc(r.unit)}</b></div></div>`;
+}
+function joinOrProgress(c, label){
+  return isJoined(c) ? progressHtml(c) : `<button data-join="${esc(cidOf(c))}" data-label="${esc(label || "Join challenge")}">${esc(label || "Join challenge")}</button>`;
+}
+function wire(el){ el.querySelectorAll("button[data-join]").forEach(b => b.onclick = () => joinChallenge(b.dataset.join, b, b.dataset.label)); }
+
+function cardContent(item){
+  const d = item.data || {}; const c = d.content || d;
+  const txt = v => (v && typeof v === "object") ? (v.content || "") : (v || "");
+  return { title: txt(c.title), body: txt(c.body), img: c.imageUrl || (c.image && c.image.url) || "",
+           buttons: (c.buttons || []).map(b => ({ text: txt(b.text), url: b.actionUrl || "", id: b.interactId || b.id || "" })) };
+}
+function matchChallenge(card){
+  const t = (card.title + " " + card.body).toLowerCase();
+  return CHALLENGES.filter(c => c.name && t.includes(c.name.toLowerCase())).sort((a,b) => b.name.length - a.name.length)[0]
+      || (CHALLENGES.length === 1 ? CHALLENGES[0] : null);
+}
+
+function renderAll(){
+  const live = document.getElementById("liveCards"); live.innerHTML = "";
+  const shown = new Set();
+  // 1) Marketing content cards from Journey Optimizer, each tied to its challenge
+  PROPS.forEach(p => (p.items || []).forEach(item => {
+    const card = cardContent(item); if (!card.title && !card.body && !card.img) return;
+    const ch = matchChallenge(card); if (ch) shown.add(cidOf(ch));
+    const joinBtn = card.buttons.find(b => /join/i.test(b.text));
+    const el = document.createElement("div"); el.className = "lc";
+    el.innerHTML = `${card.img ? `<img src="${esc(card.img)}" alt="">` : ""}<div class="b"><div class="live">● LIVE FROM JOURNEY OPTIMIZER</div>
+      <h3>${esc(card.title)}</h3><p>${esc(card.body)}</p>${ch ? joinOrProgress(ch, joinBtn && joinBtn.text) : ""}</div>`;
+    el.querySelectorAll("button[data-join]").forEach(b => b.addEventListener("click", () => {
+      alloy("sendEvent", { xdm: { eventType: "decisioning.propositionInteract", identityMap: identity(),
+        _experience: { decisioning: { propositions: [{ id: p.id, scope: p.scope, scopeDetails: p.scopeDetails }], propositionEventType: { interact: 1 },
+          propositionAction: { id: (joinBtn && joinBtn.id) || "join", label: b.dataset.label } } } } });
+    }));
+    wire(el); live.appendChild(el);
+  }));
+  // 2) Every other active challenge for this member, straight from the challenge list
+  const rest = CHALLENGES.filter(c => !shown.has(cidOf(c)));
+  const list = document.getElementById("challenges"), head = document.getElementById("challengesHead");
+  list.innerHTML = ""; list.style.display = head.style.display = rest.length ? "" : "none";
+  rest.forEach(c => {
+    const el = document.createElement("div"); el.className = "lc";
+    el.innerHTML = `<div class="b"><div class="live">● ${isComplete(c) ? "COMPLETED" : "ACTIVE · " + daysLeft(c) + " DAYS LEFT"}</div>
+      <h3>${esc(c.name)}</h3><p>${esc(c.desc || "")}</p>${joinOrProgress(c)}</div>`;
+    wire(el); list.appendChild(el);
+  });
+  if (!PROPS.length && !CHALLENGES.length) live.innerHTML = `<p style="color:#888;padding:12px">No active challenges for this member.</p>`;
+  // Visits: base + rewards from completed challenges whose reward wasn't marked failed
+  const bonus = CHALLENGES.filter(c => isJoined(c) && isComplete(c) && rewardStatus(c).cls !== "bad").reduce((s, c) => s + rewardOf(c).value, 0);
+  document.getElementById("visits").textContent = BASE_VISITS + bonus;
+  cpStatus();
+}
+
+function resetDemo(){
+  Object.keys(localStorage).filter(k => k.startsWith("joined:" + LOYALTY_ID)).forEach(k => localStorage.removeItem(k));
+  renderAll(); toast("Demo reset for this browser (Journey Optimizer sign-ups are kept).");
+}
+
+/* ---------- member picker ---------- */
+document.getElementById("memberName").textContent = qs.get("name") || MEMBER.name || LOYALTY_ID;
+(function(){
+  const sel = document.getElementById("memberPick"); if (!sel) return;
+  sel.innerHTML = Object.entries(MEMBERS).map(([lid, m]) => `<option value="${lid}" ${lid === LOYALTY_ID ? "selected" : ""}>${m.full} · ${lid}</option>`).join("")
+    + (MEMBERS[LOYALTY_ID] ? "" : `<option selected>${LOYALTY_ID}</option>`);
+  sel.onchange = () => { location.search = "?lid=" + encodeURIComponent(sel.value); };
+})();
+setInterval(()=>{ const d=new Date(); document.getElementById("clock").textContent=d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}).replace(/ [AP]M/,""); },1000);
+
+/* ---------- Web SDK: content cards ---------- */
 !function(n,o){o.forEach(function(o){n[o]||((n.__alloyNS=n.__alloyNS||[]).push(o),n[o]=function(){var u=arguments;return new Promise(function(i,l){n[o].q.push([i,l,u])})},n[o].q=[])})}(window,["alloy"]);
 const sdk=document.createElement("script"); sdk.async=true; sdk.src="https://cdn1.adoberesources.net/alloy/2.24.0/alloy.min.js"; document.head.appendChild(sdk);
-
 alloy("configure",{ datastreamId: DATASTREAM_ID, orgId: ORG_ID, defaultConsent: "in", debugEnabled: qs.has("debug") });
-
 const identity = () => ({ loyaltyId: [{ id: LOYALTY_ID, authenticatedState: "authenticated", primary: true }] });
-let PROPS = [];
-
 function loadCards(){
   return alloy("sendEvent",{
     xdm:{ eventType:"web.webpagedetails.pageViews", identityMap: identity(), web:{webPageDetails:{name:"Circle K Challenges", URL: location.href}} },
     personalization:{ surfaces:[SURFACE] }
   }).then(r => {
     PROPS = (r.propositions||[]).filter(p => (p.scope||"").indexOf("challenges")>=0 || (p.items||[]).some(i => /content-card/.test(i.schema||"")));
-    renderCards();
+    renderAll();
     if (PROPS.length) alloy("sendEvent",{ xdm:{ eventType:"decisioning.propositionDisplay", identityMap: identity(),
       _experience:{decisioning:{ propositions: PROPS.map(p=>({id:p.id,scope:p.scope,scopeDetails:p.scopeDetails})), propositionEventType:{display:1} }} }});
-  }).catch(e => console.warn("Web SDK:", e));
+  }).catch(e => { console.warn("Web SDK:", e); renderAll(); });
 }
 
-function cardContent(item){
-  const d = item.data || {}; const c = d.content || d;
-  const txt = v => (v && typeof v==="object") ? (v.content||"") : (v||"");
-  return { title: txt(c.title), body: txt(c.body), img: c.imageUrl || (c.image&&c.image.url) || "", url: c.actionUrl || "",
-           buttons: (c.buttons||[]).map(b=>({ text: txt(b.text), url: b.actionUrl||"", id: b.interactId||b.id||"" })) };
-}
-
-function renderCards(){ setTimeout(cpStatus,0);
-  const root = document.getElementById("liveCards"); root.innerHTML = "";
-  PROPS.forEach(p => (p.items||[]).forEach(item => {
-    const c = cardContent(item); const joined = JOINED;
-    if (!c.title && !c.body && !c.img) return;   // skip empty/placeholder cards
-    const el = document.createElement("div"); el.className="lc";
-    el.innerHTML = `${c.img?`<img src="${c.img}" alt="">`:""}<div class="b"><div class="live">● LIVE FROM JOURNEY OPTIMIZER</div>
-      <h3>${c.title}</h3><p>${c.body}</p>
-      ${joined ? progressHtml() : c.buttons.map((b,i)=> /join/i.test(b.text) ? `<button data-i="${i}">${b.text}</button>` : "").join("")}</div>`;
-    el.querySelectorAll("button").forEach(btn => btn.onclick = () => clickButton(p, c.buttons[+btn.dataset.i], btn));
-    root.appendChild(el);
-  }));
-  // Once a member finishes, Journey Optimizer stops sending the card. Keep showing their result from challenge status.
-  if (!root.children.length && JOINED && STATUS && STATUS.challenge) {
-    const el = document.createElement("div"); el.className="lc";
-    el.innerHTML = `<div class="b"><div class="live">● LIVE FROM JOURNEY OPTIMIZER</div>
-      <h3>Fuel + Store</h3><p>Fuel up and grab a hot food item to earn 3 bonus Visits.</p>${progressHtml()}</div>`;
-    root.appendChild(el);
-  }
-  // Visits counter: +3 once the challenge reward is issued
-  const v = document.getElementById("visits");
-  if (v) v.textContent = (JOINED && STATUS && taskProgress().every(t => t.done)) ? "5" : "2";
-}
-
-
-// ---- Challenge progress (shown in place of the Join button once joined) ----
-let STATUS = null;
-const TASK_GOALS = [{name:"Fuel Up", goal:5, unit:"gallons"}, {name:"Hot Food", goal:1, unit:"item"}];
-const END_LABEL = "11/03/2026";
-function num(o, keys){ for (const k of keys) if (o && typeof o[k] === "number") return o[k]; return null; }
-function taskProgress(){
-  const list = (STATUS && STATUS.challenge && STATUS.challenge.tasks) || [];
-  return TASK_GOALS.map((t, i) => {
-    const s = list.find(x => x.taskName === t.name) || list[i] || {};
-    const goal = (s.variables && s.variables.qtyMin) || t.goal;
-    // LMS task states seen: "incomplete" → "sent" (task done, reward sent). Treat anything past incomplete as done.
-    const done = ["complete","completed","sent","rewarded","fulfilled"].includes(String(s.taskState||"").toLowerCase());
-    return { ...t, goal, done, have: done ? goal : 0 };
-  });
-}
-function progressHtml(){
-  const ts = taskProgress(); const done = ts.filter(t => t.done).length;
-  const complete = done === ts.length;
-  return `<div class="pg">${ts.map(t => `<div class="row"><span>${t.name}</span><span>${t.done ? "Done ✓" : `${t.goal}+ ${t.unit} to go`}</span></div>
-    <div class="bar"><i style="width:${Math.round(100*t.have/t.goal)}%"></i></div>`).join("")}
-    <div class="sum"><span>${complete ? "Completed! Reward unlocked." : `${ts.length-done} of ${ts.length} tasks to go · ends ${END_LABEL}`}</span><b>+3 Visits</b></div></div>`;
-}
-function refreshStatus(){
-  return fetch(ACTIONS+"/loyalty-status?lid="+encodeURIComponent(LOYALTY_ID)).then(r => r.json())
-    .then(j => { STATUS = j; if (j.joined === true) { JOINED = true; localStorage.setItem("joined:"+LOYALTY_ID,"1"); } console.log("Challenge status:", j); });
-}
-
-// ---- Demo control panel: purchases go through the App Builder action (server-side) ----
-const CRMID = qs.get("crmid") || MEMBER.crmid || "";
-function cpLog(msg){ const el=document.getElementById("cpLog"); if(!el) return; const t=new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit",second:"2-digit"}); el.innerHTML = `<div>${t} · ${msg}</div>` + el.innerHTML; }
+/* ---------- Demo control panel (purchases go through App Builder) ---------- */
+function cpLog(msg){ const el=document.getElementById("cpLog"); if(!el) return; const t=new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit",second:"2-digit"}); el.innerHTML = `<div>${t} · ${esc(msg)}</div>` + el.innerHTML; }
 function cpStatus(){
-  const el=document.getElementById("cpStatus"); if(!el) return;
-  if (!JOINED) { el.innerHTML = `<div><span>Member</span><span class="wait">not joined yet</span></div>`; return; }
-  const ts = taskProgress(); const all = ts.every(t => t.done);
-  el.innerHTML = ts.map(t => `<div><span>${t.name}</span><span class="${t.done?'ok':'wait'}">${t.done?'complete':'incomplete'}</span></div>`).join("")
-    + `<div><span>Reward (+3 Visits)</span><span class="${all?'ok':'wait'}">${all?'issued':'pending'}</span></div>`;
+  const el = document.getElementById("cpStatus"); if (!el) return;
+  const mine = CHALLENGES.filter(isJoined);
+  if (!mine.length) { el.innerHTML = `<div><span>Member</span><span class="wait">${CHALLENGES.length ? "not joined to any challenge" : "loading challenges…"}</span></div>`; return; }
+  el.innerHTML = mine.map(c => { const rs = rewardStatus(c); const r = rewardOf(c);
+    return `<div style="margin-top:6px"><span><b>${esc(c.name)}</b></span><span></span></div>`
+      + tasksOf(c).map(t => `<div><span>&nbsp;&nbsp;${esc(t.name)}</span><span class="${t.done?'ok':'wait'}">${t.done?'complete':'incomplete'}</span></div>`).join("")
+      + `<div><span>&nbsp;&nbsp;Reward (+${r.value} ${esc(r.unit)})</span><span class="${rs.cls}">${rs.label}</span></div>`; }).join("");
 }
 function buy(items, label){
-  if (!JOINED) { toast("Join the challenge first."); cpLog("Join the challenge first"); return; }
+  if (!CHALLENGES.some(isJoined)) { toast("Join a challenge first."); cpLog("Join a challenge first"); return; }
   const btns=[...document.querySelectorAll(".cp .btns button")]; btns.forEach(b=>b.disabled=true);
   cpLog(`Sending: ${label}…`);
   fetch(ACTIONS+"/loyalty-purchase",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ lid: LOYALTY_ID, crmid: CRMID || undefined, items }) })
     .then(r => r.json()).then(j => {
       if (!j.sent) throw new Error(JSON.stringify(j));
       cpLog(`Purchase sent (${j.orderId}). Waiting for Journey Optimizer…`); toast(`Purchase: ${label}`);
-      [15000, 30000, 60000].forEach(ms => setTimeout(() => refreshStatus().then(()=>{ renderCards(); cpStatus(); }).catch(()=>{}), ms));
-    }).catch(e => { console.warn("Purchase failed:", e); cpLog("Purchase failed — see console"); toast("Purchase didn't go through."); })
+      [15000, 30000, 60000, 120000].forEach(ms => setTimeout(() => refreshStatus().then(renderAll).catch(()=>{}), ms));
+    }).catch(e => { console.warn("Purchase failed:", e); cpLog("Purchase failed. See console."); toast("Purchase didn't go through."); })
     .finally(() => btns.forEach(b=>b.disabled=false));
 }
-function clickButton(p, b, btn){
-  const interact = { eventType:"decisioning.propositionInteract", identityMap: identity(),
-    _experience:{decisioning:{ propositions:[{id:p.id,scope:p.scope,scopeDetails:p.scopeDetails}], propositionEventType:{interact:1},
-      propositionAction:{ id: b.id || b.text, label: b.text } }} };
-  alloy("sendEvent",{ xdm: interact });
-  if (/join/i.test(b.text)) {
-    // This event triggers the "Fuel + Store – Join" journey, whose custom action calls the challenge sign-up API.
-    btn.disabled = true; btn.textContent = "Joining…";
-    fetch(ACTIONS+"/loyalty-join",{ method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ lid: LOYALTY_ID }) })
-      .then(r => r.json()).then(j => {
-        if (!j.joined) throw new Error(JSON.stringify(j));
-        JOINED = true; localStorage.setItem("joined:"+LOYALTY_ID,"1"); renderCards(); refreshStatus().then(renderCards).catch(()=>{}); toast("You're in! Fuel + Store challenge joined.");
-      }).catch(e => { console.warn("Join failed:", e); btn.disabled=false; btn.textContent=b.text; toast("Couldn't join right now — try again."); });
-  } else if (b.url) { location.href = b.url; }
-}
 
-// Real sign-up status from Journey Optimizer (via App Builder), then load cards
-refreshStatus()
-  .catch(e => console.warn("Status lookup failed, using local state:", e))
-  .finally(loadCards);
-// Re-check progress every 30s so test purchases show up without a reload
-setInterval(() => { if (JOINED) refreshStatus().then(renderCards).catch(()=>{}); }, 30000);
+/* ---------- start ---------- */
+refreshStatus().catch(e => console.warn("Challenge list failed:", e)).finally(loadCards);
+setInterval(() => refreshStatus().then(renderAll).catch(()=>{}), 30000);
 </script>
 </body>
 </html>
