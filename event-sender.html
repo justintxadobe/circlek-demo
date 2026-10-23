@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AJO Event Sender · jjohnsonsbdev</title>
+<style>
+  :root { --red:#da291c; --ink:#1d1d1f; --mute:#6b6b70; --line:#e3e3e8; --bg:#f6f6f8; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--red); color:#fff; padding:14px 20px; }
+  header h1 { margin:0; font-size:18px; } header p { margin:2px 0 0; font-size:12px; opacity:.85; }
+  main { max-width:1100px; margin:18px auto; padding:0 16px; display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; }
+  h2 { font-size:14px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.04em; color:var(--mute); }
+  label { display:block; font-size:12px; color:var(--mute); margin:10px 0 4px; }
+  select, input, textarea { width:100%; padding:8px; border:1px solid var(--line); border-radius:6px; font:inherit; font-size:14px; }
+  textarea { font-family:ui-monospace,Menlo,monospace; font-size:12px; min-height:340px; }
+  .hint { font-size:12px; color:var(--mute); margin-top:6px; }
+  .rule { font-family:ui-monospace,Menlo,monospace; font-size:11px; background:#fafafa; border:1px dashed var(--line); padding:6px; border-radius:6px; word-break:break-all; }
+  button { background:var(--red); color:#fff; border:0; border-radius:6px; padding:10px 16px; font-weight:600; cursor:pointer; margin-top:12px; }
+  button.secondary { background:#fff; color:var(--ink); border:1px solid var(--line); }
+  #log { font-family:ui-monospace,Menlo,monospace; font-size:12px; white-space:pre-wrap; max-height:300px; overflow:auto; }
+  .ok { color:#137333; } .bad { color:#b3261e; }
+  .full { grid-column:1 / -1; }
+  @media (max-width:800px){ main { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>AJO Event Sender</h1>
+  <p>Pick a profile and one of your Journey Optimizer events, set the data, and send it to Experience Platform (sandbox jjohnsonsbdev). Starts live, published journeys only.</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1 · Profile</h2>
+    <label for="profile">Loyalty member</label>
+    <select id="profile"></select>
+    <label for="crmid">CRM ID</label>
+    <input id="crmid">
+    <label for="email">Email (only used by web-event journeys)</label>
+    <input id="email" placeholder="name@example.com">
+
+    <h2 style="margin-top:20px">2 · Event</h2>
+    <label for="event">Journey Optimizer event</label>
+    <select id="event"></select>
+    <div class="hint" id="schemaInfo"></div>
+    <label>Entry rule this event checks</label>
+    <div class="rule" id="rule"></div>
+
+    <h2 style="margin-top:20px">3 · Event data</h2>
+    <div id="fields"></div>
+    <button class="secondary" id="rebuild">Rebuild payload from form</button>
+  </section>
+
+  <section class="card">
+    <h2>Payload (editable)</h2>
+    <textarea id="payload" spellcheck="false"></textarea>
+    <button id="send">Send event</button>
+  </section>
+
+  <section class="card full">
+    <h2>Result</h2>
+    <div id="log">Nothing sent yet.</div>
+  </section>
+</main>
+
+<script>
+const ACTIONS = "https://280485-circlekloyalty-stage.adobeioruntime.net/api/v1/web/circlek";
+
+const PROFILES = [
+  ["Jacklin Samwell","CK-LOY-E7F6C01177","6"], ["Kirk Chauvey","CK-LOY-7902699BE4","7"], ["Justin Johnson","CK-LOY-6B86B273FF","1"],
+  ["Susan Roberts","CK-LOY-FCC1F951AA","100177"], ["Sharon Hill","CK-LOY-227C63EF00","100181"], ["Samuel King","CK-LOY-376ED752C1","100182"],
+  ["Christine Gonzalez","CK-LOY-499C596332","100185"], ["Charles Harris","CK-LOY-79DF212CCC","100186"], ["Nancy Mitchell","CK-LOY-F34E7B6584","100188"],
+  ["Larry White","CK-LOY-F5DB75E046","100189"], ["Shirley Campbell","CK-LOY-EDD36036B2","100190"], ["Jason Garcia","CK-LOY-2080415A4C","100150"],
+  ["Stephen Taylor","CK-LOY-0DBDEEEA30","100151"], ["Rebecca Clark","CK-LOY-E804009673","100154"], ["Charles Morris","CK-LOY-8FC99E8792","100155"],
+  ["Anthony Lee","CK-LOY-DD0C7045A0","100157"], ["Matthew Green","CK-LOY-89D4DC72E9","100160"], ["Dorothy Reyes","CK-LOY-C82851D88B","100161"],
+  ["Alexander Murphy","CK-LOY-C6C239E318","100166"], ["Nancy Garcia","CK-LOY-B4410914D6","100169"], ["Katherine Roberts","CK-LOY-58A584DC3F","100171"],
+  ["Nancy Adams","CK-LOY-61818A6FBE","100174"]
+];
+
+// Schemas the send-event action accepts, with the editable fields for each.
+const SCHEMAS = {
+  purchases: { label: "Purchases schema", fields: [["productItem","Product item"]] },
+  web: { label: "Web Event Schema (keyed on Email)", fields: [["eventType","Event type"],["url","Page URL"],
+        ["tripStartDate","Quote: trip start date"],["tripEndDate","Quote: trip end date"],["tripCost1","Quote: trip cost"],
+        ["stateOfResidence","Quote: state of residence"],["destination","Quote: destination"],["depositDate","Quote: deposit date"]] },
+  pharma: { label: "wePharma: Customer Actions schema", fields: [["eventType","Event type"],["actionCategory","Action category"],
+        ["actionChannel","Action channel"],["actionName","Action name"],["actionSource","Action source"]] }
+};
+
+const NIKE = "Mens Nike Dunk Low Retro", JEANS = "Sweet Mid Rise Straight Leg Jeans";
+const P = (name, item) => ({ name, schema:"purchases", defaults:{ productItem:item }, rule:`productItem == "${item}"` });
+const W = (name, defaults, rule) => ({ name, schema:"web", defaults, rule });
+const H = (name, type) => ({ name, schema:"pharma", defaults:{ eventType:type }, rule:`eventType in ["${type}"]` });
+
+// All 40 unitary events in jjohnsonsbdev (challenge-generated lcs_* events excluded). All are rule-based.
+const EVENTS = [
+  P("retailPurchase", JEANS), P("passwordReset", JEANS), P("jacketPurchase", "Jacket"),
+  ...["reserveNow","reserveVehicle","addtoCart","upgradeComplete","upgradeMembership","scoreChange","diagnosticsReport",
+      "orderPickedup","pickupOrder","addtoBag","requestComplete","requestAppointment","aboveMarket","timesharePost",
+      "requestBook","viewBook","viewInventory","buildPrice","confirmSignup","choosePlan","finishedQuote","getQuote",
+      "orderConfirm","orderNow","activateTrial","plusSignup","poiExit","poiEntry","shoePurchase"].map(n => P(n, NIKE)),
+  W("QuoteComplete", { url:"https://example.com/quoteComplete" }, 'web.webPageDetails.URL contains "quoteComplete"'),
+  W("startQuote", { eventType:"quote.start" }, 'eventType in ["quote.start"]'),
+  H("surveyComplete","rep.appointment"), H("callComplete","rep.appointment"), H("visitComplete","rep.appointment"),
+  H("orderSample","order.sample"), H("rxWritten","rx.written"), H("whitepaperDownload","whitepaper.download")
+].sort((a,b) => a.name.localeCompare(b.name));
+
+const $ = id => document.getElementById(id);
+PROFILES.forEach(([n,lid,crm],i) => $("profile").add(new Option(`${n} · ${lid}`, i)));
+EVENTS.forEach((e,i) => $("event").add(new Option(`${e.name}  (${e.schema})`, i)));
+$("event").value = String(EVENTS.findIndex(e => e.name === "retailPurchase"));
+
+function setProfile() { const p = PROFILES[$("profile").value]; $("crmid").value = p[2]; build(); }
+function renderFields() {
+  const e = EVENTS[$("event").value], s = SCHEMAS[e.schema];
+  $("schemaInfo").textContent = s.label + (e.name === "orderSample" ? " · note: order.sample isn't in this schema's eventType list, so Platform may reject it" : "");
+  $("rule").textContent = e.rule;
+  $("fields").innerHTML = s.fields.map(([k,l]) =>
+    `<label for="f_${k}">${l}</label><input id="f_${k}" data-k="${k}" value="${(e.defaults[k] ?? "").replace(/"/g,"&quot;")}">`).join("");
+  $("fields").querySelectorAll("input").forEach(i => i.addEventListener("input", build));
+  build();
+}
+function v(k) { const el = $("f_"+k); return el ? el.value.trim() : ""; }
+function prune(o) { // drop empty strings / empty objects
+  if (Array.isArray(o)) return o; if (o && typeof o === "object") {
+    for (const k of Object.keys(o)) { o[k] = prune(o[k]); if (o[k] === "" || o[k] === undefined || (o[k] && typeof o[k] === "object" && !Array.isArray(o[k]) && !Object.keys(o[k]).length)) delete o[k]; }
+  } return o;
+}
+function build() {
+  const e = EVENTS[$("event").value], crmid = $("crmid").value.trim(), email = $("email").value.trim();
+  const lid = PROFILES[$("profile").value][1];
+  let xdm;
+  if (e.schema === "purchases") {
+    xdm = { eventType:"commerce.purchases",
+      identityMap:{ loyaltyId:[{ id:lid, primary:true }], crmid:[{ id:crmid, primary:false }] },
+      _journeyusshared:{ identification:{ core:{ crmid, loyaltyID:lid } }, details:{ productItem:v("productItem") } } };
+  } else if (e.schema === "web") {
+    xdm = { eventType:v("eventType") || "web.webpagedetails.pageViews",
+      identityMap:{ Email:[{ id:email, primary:true }] },
+      web:{ webPageDetails:{ URL:v("url") } },
+      _journeyusshared:{ identification:{ core:{ email } }, quote:{ tripStartDate:v("tripStartDate"), tripEndDate:v("tripEndDate"),
+        tripCost1:v("tripCost1"), stateOfResidence:v("stateOfResidence"), destination:v("destination"), depositDate:v("depositDate") } } };
+  } else {
+    xdm = { eventType:v("eventType"),
+      _journeyusshared:{ identification:{ core:{ crmid } }, healthClinicianActionDetails:{ actionCategory:v("actionCategory"),
+        actionChannel:v("actionChannel"), actionName:v("actionName"), actionSource:v("actionSource") } } };
+  }
+  $("payload").value = JSON.stringify(prune(xdm), null, 2);
+}
+
+async function send() {
+  const e = EVENTS[$("event").value]; let xdm;
+  try { xdm = JSON.parse($("payload").value); } catch (err) { return log(`<span class="bad">Payload isn't valid JSON: ${err.message}</span>`); }
+  if (e.schema === "web" && !$("email").value.trim()) return log('<span class="bad">This event is keyed on Email. Enter an email first.</span>');
+  $("send").disabled = true; log(`Sending ${e.name}…`);
+  try {
+    const r = await fetch(ACTIONS + "/send-event", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ schema:e.schema, xdm }) });
+    const data = await r.json().catch(() => ({}));
+    const when = new Date().toLocaleTimeString();
+    log(r.ok && data.sent
+      ? `<span class="ok">✔ ${when} · ${e.name} accepted by Experience Platform (HTTP ${data.status}).</span>\nA published journey listening for ${e.name} should pick it up shortly.\n\n` + esc(JSON.stringify(data, null, 2))
+      : `<span class="bad">✖ ${when} · ${e.name} was rejected (HTTP ${data.status || r.status}).</span>\n\n` + esc(JSON.stringify(data, null, 2)));
+  } catch (err) { log(`<span class="bad">Couldn't reach the app: ${esc(err.message)}</span>`); }
+  $("send").disabled = false;
+}
+const esc = s => s.replace(/[&<>]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
+function log(html) { $("log").innerHTML = html; }
+
+$("profile").addEventListener("change", setProfile);
+$("event").addEventListener("change", renderFields);
+$("crmid").addEventListener("input", build);
+$("email").addEventListener("input", build);
+$("rebuild").addEventListener("click", build);
+$("send").addEventListener("click", send);
+$("crmid").value = PROFILES[0][2]; renderFields();
+</script>
+</body>
+</html>
