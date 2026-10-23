@@ -158,6 +158,14 @@ const BASE_VISITS = 2;
 const qs = new URLSearchParams(location.search);
 const LOYALTY_ID = (qs.get("lid") || "CK-LOY-2080415A4C").toUpperCase();
 const MEMBERS = {
+  "CK-LOY-E7F6C01177": { name: "Jacklin S.", full: "Jacklin Samwell", crmid: "6" },
+  "CK-LOY-7902699BE4": { name: "Kirk C.", full: "Kirk Chauvey", crmid: "7" },
+  "CK-LOY-2C624232CD": { name: "Kaitlynn G.", full: "Kaitlynn Guilbert", crmid: "8" },
+  "CK-LOY-6B86B273FF": { name: "Justin J.", full: "Justin Johnson", crmid: "1" },
+  "CK-LOY-D4735E3A26": { name: "Tiff N.", full: "Tiff Nutley", crmid: "2" },
+  "CK-LOY-4E07408562": { name: "Melessa K.", full: "Melessa Kondrat", crmid: "3" },
+  "CK-LOY-4B227777D4": { name: "Suzi S.", full: "Suzi Showler", crmid: "4" },
+  "CK-LOY-EF2D127DE3": { name: "Biddie B.", full: "Biddie Boyde", crmid: "5" },
   "CK-LOY-2080415A4C": { name: "Jason G.", full: "Jason Garcia", crmid: "100150" },
   "CK-LOY-0DBDEEEA30": { name: "Stephen T.", full: "Stephen Taylor", crmid: "100151" },
   "CK-LOY-E804009673": { name: "Rebecca C.", full: "Rebecca Clark", crmid: "100154" },
@@ -171,6 +179,18 @@ const MEMBERS = {
   "CK-LOY-61818A6FBE": { name: "Nancy A.", full: "Nancy Adams", crmid: "100174" }
 };
 const MEMBER = MEMBERS[LOYALTY_ID] || {};
+
+/* Fresh browser identity per member: Web SDK stores the browser ID (ECID) in first-party cookies.
+   If the member changed since last load, wipe those cookies so this member gets a new ECID and
+   profiles don't get stitched together through a shared browser ID. */
+function clearAdobeIdentity(){
+  document.cookie.split(";").map(c => c.split("=")[0].trim())
+    .filter(n => /^(kndctr_|AMCV_|AMCVS_|mbox|at_check|s_ecid|demdex)/.test(n))
+    .forEach(n => { [location.hostname, "." + location.hostname, ""].forEach(d => {
+      document.cookie = n + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/" + (d ? "; domain=" + d : ""); }); });
+  Object.keys(localStorage).filter(k => /^(com\.adobe|alloy|kndctr)/i.test(k)).forEach(k => localStorage.removeItem(k));
+}
+if (localStorage.getItem("ck-active-lid") !== LOYALTY_ID) { clearAdobeIdentity(); localStorage.setItem("ck-active-lid", LOYALTY_ID); }
 const CRMID = qs.get("crmid") || MEMBER.crmid || "";
 
 let CHALLENGES = [];   // from Journey Optimizer
@@ -299,14 +319,14 @@ document.getElementById("memberName").textContent = qs.get("name") || MEMBER.nam
   const sel = document.getElementById("memberPick"); if (!sel) return;
   sel.innerHTML = Object.entries(MEMBERS).map(([lid, m]) => `<option value="${lid}" ${lid === LOYALTY_ID ? "selected" : ""}>${m.full} · ${lid}</option>`).join("")
     + (MEMBERS[LOYALTY_ID] ? "" : `<option selected>${LOYALTY_ID}</option>`);
-  sel.onchange = () => { location.search = "?lid=" + encodeURIComponent(sel.value); };
+  sel.onchange = () => { clearAdobeIdentity(); localStorage.setItem("ck-active-lid", sel.value); location.search = "?lid=" + encodeURIComponent(sel.value); };
 })();
 setInterval(()=>{ const d=new Date(); document.getElementById("clock").textContent=d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}).replace(/ [AP]M/,""); },1000);
 
 /* ---------- Web SDK: content cards ---------- */
 !function(n,o){o.forEach(function(o){n[o]||((n.__alloyNS=n.__alloyNS||[]).push(o),n[o]=function(){var u=arguments;return new Promise(function(i,l){n[o].q.push([i,l,u])})},n[o].q=[])})}(window,["alloy"]);
 const sdk=document.createElement("script"); sdk.async=true; sdk.src="https://cdn1.adoberesources.net/alloy/2.24.0/alloy.min.js"; document.head.appendChild(sdk);
-alloy("configure",{ datastreamId: DATASTREAM_ID, orgId: ORG_ID, defaultConsent: "in", debugEnabled: qs.has("debug") });
+alloy("configure",{ datastreamId: DATASTREAM_ID, orgId: ORG_ID, defaultConsent: "in", thirdPartyCookiesEnabled: false, debugEnabled: qs.has("debug") });
 const identity = () => ({ loyaltyId: [{ id: LOYALTY_ID, authenticatedState: "authenticated", primary: true }] });
 function loadCards(){
   return alloy("sendEvent",{
