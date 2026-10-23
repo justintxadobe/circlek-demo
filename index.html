@@ -292,9 +292,20 @@ function cardContent(item){
            buttons: (c.buttons || []).map(b => ({ text: txt(b.text), url: b.actionUrl || "", id: b.interactId || b.id || "" })) };
 }
 function matchChallenge(card){
-  const t = (card.title + " " + card.body).toLowerCase();
-  return CHALLENGES.filter(c => c.name && t.includes(c.name.toLowerCase())).sort((a,b) => b.name.length - a.name.length)[0]
-      || (CHALLENGES.length === 1 ? CHALLENGES[0] : null);
+  const norm = s => String(s || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+  const t = norm(card.title + " " + card.body);
+  // 1) exact name or description found in the card
+  const exact = CHALLENGES.filter(c => (c.name && t.includes(norm(c.name))) || (c.desc && t.includes(norm(c.desc))))
+    .sort((a,b) => b.name.length - a.name.length)[0];
+  if (exact) return exact;
+  // 2) best word overlap with the challenge name + description (handles renamed challenges)
+  const words = new Set(t.split(" ").filter(w => w.length > 2));
+  let best = null, bestScore = 0;
+  CHALLENGES.forEach(c => {
+    const score = norm(c.name + " " + (c.desc || "")).split(" ").filter(w => w.length > 2 && words.has(w)).length;
+    if (score > bestScore) { best = c; bestScore = score; }
+  });
+  return bestScore >= 3 ? best : (CHALLENGES.length === 1 ? CHALLENGES[0] : null);
 }
 
 function renderAll(){
