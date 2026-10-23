@@ -305,7 +305,7 @@ function matchChallenge(card){
     const score = norm(c.name + " " + (c.desc || "")).split(" ").filter(w => w.length > 2 && words.has(w)).length;
     if (score > bestScore) { best = c; bestScore = score; }
   });
-  return bestScore >= 3 ? best : (CHALLENGES.length === 1 ? CHALLENGES[0] : null);
+  return bestScore >= 3 ? best : null;
 }
 
 function renderAll(){
@@ -314,7 +314,10 @@ function renderAll(){
   // 1) Marketing content cards from Journey Optimizer, each tied to its challenge
   PROPS.forEach(p => (p.items || []).forEach(item => {
     const card = cardContent(item); if (!card.title && !card.body && !card.img) return;
-    const ch = matchChallenge(card); if (ch) shown.add(cidOf(ch));
+    const ch = matchChallenge(card);
+    // Only show cards tied to a challenge that is live right now, one card per challenge
+    if (!ch || shown.has(cidOf(ch))) return;
+    shown.add(cidOf(ch));
     const joinBtn = card.buttons.find(b => /join/i.test(b.text));
     const el = document.createElement("div"); el.className = "lc";
     el.innerHTML = `${card.img ? `<img src="${esc(card.img)}" alt="">` : ""}<div class="b"><div class="live">● LIVE FROM JOURNEY OPTIMIZER</div>
