@@ -370,7 +370,19 @@ function buy(items, label){
     .then(r => r.json()).then(j => {
       if (!j.sent) throw new Error(JSON.stringify(j));
       cpLog(`Purchase sent (${j.orderId}). Waiting for Journey Optimizer…`); toast(`Purchase: ${label}`);
-      [15000, 30000, 60000, 120000].forEach(ms => setTimeout(() => refreshStatus().then(renderAll).catch(()=>{}), ms));
+      // Fast poll: every 5s for up to 4 minutes, stop as soon as task progress changes
+      const before = JSON.stringify(CHALLENGES.map(c => [(c.tasks||[]).map(t => t.taskState), c.state]));
+      const t0 = Date.now(); clearInterval(window._fast);
+      window._fast = setInterval(() => {
+        refreshStatus().then(() => {
+          renderAll();
+          const now = JSON.stringify(CHALLENGES.map(c => [(c.tasks||[]).map(t => t.taskState), c.state]));
+          const secs = Math.round((Date.now()-t0)/1000);
+          if (now !== before) { clearInterval(window._fast); cpLog(`Progress updated after ${secs}s.`); toast("Challenge progress updated"); }
+          else if (secs >= 240) { clearInterval(window._fast); cpLog("No update after 4 minutes."); }
+          else cpLog(`Waiting for Journey Optimizer… ${secs}s`);
+        }).catch(()=>{});
+      }, 5000);
     }).catch(e => { console.warn("Purchase failed:", e); cpLog("Purchase failed. See console."); toast("Purchase didn't go through."); })
     .finally(() => btns.forEach(b=>b.disabled=false));
 }
