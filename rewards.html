@@ -51,7 +51,7 @@
 <script>
 const ACTIONS = "https://280485-circlekloyalty-stage.adobeioruntime.net/api/v1/web/circlek";
 let seen = new Set(), first = true;
-const NAMES = {"CK-LOY-2080415A4C":"Jason Garcia","CK-LOY-0DBDEEEA30":"Stephen Taylor","CK-LOY-E804009673":"Rebecca Clark","CK-LOY-8FC99E8792":"Charles Morris","CK-LOY-DD0C7045A0":"Anthony Lee","CK-LOY-89D4DC72E9":"Matthew Green","CK-LOY-C82851D88B":"Dorothy Reyes","CK-LOY-C6C239E318":"Alexander Murphy","CK-LOY-B4410914D6":"Nancy Garcia","CK-LOY-58A584DC3F":"Katherine Roberts","CK-LOY-61818A6FBE":"Nancy Adams"};
+const NAMES = {"CK-LOY-FCC1F951AA":"Susan Roberts","CK-LOY-227C63EF00":"Sharon Hill","CK-LOY-376ED752C1":"Samuel King","CK-LOY-499C596332":"Christine Gonzalez","CK-LOY-79DF212CCC":"Charles Harris","CK-LOY-F34E7B6584":"Nancy Mitchell","CK-LOY-F5DB75E046":"Larry White","CK-LOY-EDD36036B2":"Shirley Campbell","CK-LOY-6B86B273FF":"Justin Johnson","CK-LOY-E7F6C01177":"Jacklin Samwell","CK-LOY-7902699BE4":"Kirk Chauvey","CK-LOY-2080415A4C":"Jason Garcia","CK-LOY-0DBDEEEA30":"Stephen Taylor","CK-LOY-E804009673":"Rebecca Clark","CK-LOY-8FC99E8792":"Charles Morris","CK-LOY-DD0C7045A0":"Anthony Lee","CK-LOY-89D4DC72E9":"Matthew Green","CK-LOY-C82851D88B":"Dorothy Reyes","CK-LOY-C6C239E318":"Alexander Murphy","CK-LOY-B4410914D6":"Nancy Garcia","CK-LOY-58A584DC3F":"Katherine Roberts","CK-LOY-61818A6FBE":"Nancy Adams"};
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function render(list){
   document.getElementById("kCount").textContent = list.length;
