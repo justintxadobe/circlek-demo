@@ -298,7 +298,7 @@ function progressHtml(c){
 }
 function joinOrProgress(c, label){
   return isJoined(c)
-    ? progressHtml(c) + (isComplete(c) ? "" : `<button class="wd" data-withdraw="${esc(cidOf(c))}">Withdraw</button>`)
+    ? progressHtml(c) + `<button class="wd" data-withdraw="${esc(cidOf(c))}">Withdraw</button>`
     : `<button data-join="${esc(cidOf(c))}" data-label="${esc(label || "Join challenge")}">${esc(label || "Join challenge")}</button>`;
 }
 function wire(el){
