@@ -65,11 +65,14 @@ function render(list){
     const fw = !r.forwarded ? `<span style="color:#888">off</span>` : r.forwarded === "ok" ? `<span class="ok">✓ sent</span>` : `<span class="bad">${esc(r.forwarded)}</span>`;
     return `<tr class="${fresh?'new':''}"><td>${new Date(r.receivedAt).toLocaleString()}</td><td>${NAMES[r.profileId] ? `<b>${esc(NAMES[r.profileId])}</b><br><small style="color:#999">${esc(r.profileId)}</small>` : esc(r.profileId||"unknown")}</td>
       <td>${esc(r.challenge||"—")}</td><td class="amt">+${esc(r.value??"?")} ${esc(r.denomination||"")}</td><td>${fw}</td>
-      <td><details><summary>view</summary><pre>${esc(JSON.stringify(r.payload,null,2))}</pre></details></td></tr>`;
+      <td><details data-id="${esc(r.id)}" ${openIds.has(String(r.id))?'open':''} ontoggle="trackOpen(this)"><summary>view</summary><pre>${esc(JSON.stringify(r.payload,null,2))}</pre></details></td></tr>`;
   }).join("");
   list.forEach(r => seen.add(r.id)); first = false;
 }
+const openIds = new Set();
+function trackOpen(el){ el.open ? openIds.add(el.dataset.id) : openIds.delete(el.dataset.id); }
 function load(){
+  if (openIds.size) { document.getElementById("upd").textContent = "Paused while a payload is open "; return; }
   fetch(ACTIONS+"/loyalty-rewards-feed").then(r=>r.json()).then(j=>{
     render(j.rewards||[]); document.getElementById("upd").textContent = "Updated "+new Date().toLocaleTimeString()+" ";
   }).catch(e=>{ document.getElementById("upd").textContent = "Feed unavailable "; console.warn(e); });
