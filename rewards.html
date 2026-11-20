@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Circle K Rewards Provider – Live Awards</title>
+<title>Loyalty Rewards Provider – Live Awards &amp; Member Ledger</title>
 <style>
   :root{--red:#DA291C;--orange:#F68B1F;--bg:#1c1c1e;--card:#2a2a2c;--line:#3a3a3c}
   *{box-sizing:border-box}body{margin:0;background:var(--bg);color:#eee;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
@@ -24,18 +24,35 @@
   tr.new td{animation:hl 3s ease-out}@keyframes hl{from{background:rgba(246,139,31,.35)}to{background:transparent}}
   .amt{color:var(--orange);font-weight:700}.ok{color:#6fcf73}.bad{color:#ff7b72}
   details summary{cursor:pointer;color:#aaa;font-size:12px}pre{white-space:pre-wrap;font-size:11px;color:#bbb;max-width:420px}
+  .pos{color:#6fcf73;font-weight:700}.neg{color:#ff7b72;font-weight:700}
+  .led{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:24px}
+  .led .top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+  .led h2{margin:0;font-size:16px;flex:1;min-width:260px}.led select,.led input{background:#1c1c1e;color:#eee;border:1px solid #555;border-radius:8px;padding:7px 10px}
+  .led button{background:#3a3a3c;color:#fff;border:1px solid #555;border-radius:8px;padding:7px 12px;cursor:pointer}
+  .bal{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+  .bal div{background:#232325;border-radius:10px;padding:12px}.bal small{color:#aaa;text-transform:uppercase;font-size:11px;letter-spacing:.06em}.bal b{display:block;font-size:26px;margin-top:4px}
   .empty{padding:40px;text-align:center;color:#888}
 </style>
 </head>
 <body>
 <header>
-  <h1>Circle K <span>Rewards Provider</span> · Live awards</h1>
+  <h1>Loyalty <span>Rewards Provider</span> · Live awards &amp; member ledger</h1>
   <a href="./">← Back to member app</a>
 </header>
 <main>
+  <section class="led">
+    <div class="top"><h2>Member ledger <small style="color:#888;font-weight:400">· loyalty system of record (balances start at 100 points)</small></h2>
+      <select id="lPick" onchange="loadLedger()"></select>
+      <input id="lAmt" type="number" min="1" value="50" style="width:80px">
+      <button onclick="redeem('points')">Redeem points</button>
+      <button onclick="redeem('freeCoffee')">Redeem free coffee</button>
+      <button onclick="resetLedger()">Reset to 100</button></div>
+    <div class="bal"><div><small>Points</small><b id="lPts">–</b></div><div><small>Free coffees</small><b id="lCof">–</b></div><div><small>Last activity</small><b id="lLast" style="font-size:16px">–</b></div></div>
+    <table><thead><tr><th>When</th><th>Activity</th><th>Source</th><th>Change</th></tr></thead><tbody id="lRows"></tbody></table>
+  </section>
   <div class="kpis">
     <div class="kpi"><div class="l">Awards received</div><div class="v" id="kCount">0</div></div>
-    <div class="kpi"><div class="l">Visits issued</div><div class="v" id="kVisits">0</div></div>
+    <div class="kpi"><div class="l">Points issued</div><div class="v" id="kVisits">0</div></div>
     <div class="kpi"><div class="l">Members rewarded</div><div class="v" id="kMembers">0</div></div>
     <div class="kpi"><div class="l">Last award</div><div class="v" id="kLast" style="font-size:20px">—</div></div>
   </div>
@@ -51,7 +68,7 @@
 <script>
 const ACTIONS = "https://280485-circlekloyalty-stage.adobeioruntime.net/api/v1/web/circlek";
 let seen = new Set(), first = true;
-const NAMES = {"CK-LOY-FCC1F951AA":"Susan Roberts","CK-LOY-227C63EF00":"Sharon Hill","CK-LOY-376ED752C1":"Samuel King","CK-LOY-499C596332":"Christine Gonzalez","CK-LOY-79DF212CCC":"Charles Harris","CK-LOY-F34E7B6584":"Nancy Mitchell","CK-LOY-F5DB75E046":"Larry White","CK-LOY-EDD36036B2":"Shirley Campbell","CK-LOY-6B86B273FF":"Justin Johnson","CK-LOY-E7F6C01177":"Jacklin Samwell","CK-LOY-7902699BE4":"Kirk Chauvey","CK-LOY-2080415A4C":"Jason Garcia","CK-LOY-0DBDEEEA30":"Stephen Taylor","CK-LOY-E804009673":"Rebecca Clark","CK-LOY-8FC99E8792":"Charles Morris","CK-LOY-DD0C7045A0":"Anthony Lee","CK-LOY-89D4DC72E9":"Matthew Green","CK-LOY-C82851D88B":"Dorothy Reyes","CK-LOY-C6C239E318":"Alexander Murphy","CK-LOY-B4410914D6":"Nancy Garcia","CK-LOY-58A584DC3F":"Katherine Roberts","CK-LOY-61818A6FBE":"Nancy Adams"};
+const NAMES = {"CK-LOY-FCC1F951AA":"Susan Roberts","CK-LOY-227C63EF00":"Sharon Hill","CK-LOY-376ED752C1":"Samuel King","CK-LOY-499C596332":"Christine Gonzalez","CK-LOY-79DF212CCC":"Charles Harris","CK-LOY-F34E7B6584":"Nancy Mitchell","CK-LOY-F5DB75E046":"Larry White","CK-LOY-EDD36036B2":"Shirley Campbell","CK-LOY-6B86B273FF":"Justin Johnson","CK-LOY-E7F6C01177":"Jacklin Samwell","CK-LOY-7902699BE4":"Kirk Chauvey","CK-LOY-2080415A4C":"Jason Garcia","CK-LOY-0DBDEEEA30":"Stephen Taylor","CK-LOY-E804009673":"Rebecca Clark","CK-LOY-8FC99E8792":"Charles Morris","CK-LOY-DD0C7045A0":"Anthony Lee","CK-LOY-89D4DC72E9":"Matthew Green","CK-LOY-C82851D88B":"Dorothy Reyes","CK-LOY-C6C239E318":"Alexander Murphy","CK-LOY-B4410914D6":"Nancy Garcia","CK-LOY-58A584DC3F":"Katherine Roberts","CK-LOY-61818A6FBE":"Nancy Adams","TH-LOY-395D92B198":"Emma Tremblay","TH-LOY-CCF62E090B":"Liam Roy","TH-LOY-63E76E8F10":"Olivia Gagnon","TH-LOY-7D37B2FAC7":"Noah MacDonald","TH-LOY-83BE4EF7B2":"Ava Wilson","TH-LOY-286498A9A6":"Ethan Martin","TH-LOY-D4002833A2":"Chloe Bouchard","TH-LOY-EA1C319050":"Lucas Campbell","TH-LOY-F0CFE88095":"Sophie Leblanc"};
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function render(list){
   document.getElementById("kCount").textContent = list.length;
@@ -64,7 +81,7 @@ function render(list){
     const fresh = !first && !seen.has(r.id);
     const fw = !r.forwarded ? `<span style="color:#888">off</span>` : r.forwarded === "ok" ? `<span class="ok">✓ sent</span>` : `<span class="bad">${esc(r.forwarded)}</span>`;
     return `<tr class="${fresh?'new':''}"><td>${new Date(r.receivedAt).toLocaleString()}</td><td>${NAMES[r.profileId] ? `<b>${esc(NAMES[r.profileId])}</b><br><small style="color:#999">${esc(r.profileId)}</small>` : esc(r.profileId||"unknown")}</td>
-      <td>${esc(r.challenge||"—")}</td><td class="amt">+${esc(r.value??"?")} ${esc(r.denomination||"")}</td><td>${fw}</td>
+      <td>${esc(r.challenge||"—")}</td><td class="amt">+${esc(r.value??"?")} ${esc(r.denomination||"")}${r.balanceAfter ? `<br><small style="color:#999;font-weight:400">balance ${esc(r.balanceAfter.points)} pts${r.balanceAfter.freeCoffee ? " · " + esc(r.balanceAfter.freeCoffee) + " coffee" : ""}</small>` : ""}</td><td>${fw}</td>
       <td><details data-id="${esc(r.id)}" ${openIds.has(String(r.id))?'open':''} ontoggle="trackOpen(this)"><summary>view</summary><pre>${esc(JSON.stringify(r.payload,null,2))}</pre></details></td></tr>`;
   }).join("");
   list.forEach(r => seen.add(r.id)); first = false;
@@ -79,6 +96,39 @@ function load(){
 }
 function clearFeed(){ if (confirm("Clear all awards from the dashboard?")) fetch(ACTIONS+"/loyalty-rewards-feed?clear=true").then(load); }
 load(); setInterval(load, 5000);
+
+/* ---------- member ledger ---------- */
+const LQ = (new URLSearchParams(location.search).get("lid") || "").toUpperCase();
+(function(){
+  const sel = document.getElementById("lPick");
+  const ids = Object.keys(NAMES).sort((a,b) => (a.startsWith("TH") ? 0 : 1) - (b.startsWith("TH") ? 0 : 1) || NAMES[a].localeCompare(NAMES[b]));
+  if (LQ && !NAMES[LQ]) ids.unshift(LQ);
+  sel.innerHTML = ids.map(id => `<option value="${id}">${esc(NAMES[id] || id)} · ${id}</option>`).join("");
+  sel.value = LQ || "TH-LOY-83BE4EF7B2";
+})();
+function ledgerUrl(extra){ return `${ACTIONS}/loyalty-rewards-feed?lid=${encodeURIComponent(document.getElementById("lPick").value)}${extra || ""}`; }
+function showLedger(l){
+  if (!l) return;
+  document.getElementById("lPts").textContent = (l.points ?? 0).toLocaleString();
+  document.getElementById("lCof").textContent = l.freeCoffee ?? 0;
+  const h = l.history || [];
+  document.getElementById("lLast").textContent = h[0] ? new Date(h[0].at).toLocaleString() : "–";
+  document.getElementById("lRows").innerHTML = h.map(e => {
+    const amt = e.type === "opening" ? e.points : e.amount;
+    const unit = e.bucket === "freeCoffee" ? " free coffee" : " pts";
+    const what = e.type === "opening" ? "Welcome balance" : e.type === "earn" ? "Earned" + (e.rewardName ? ": " + esc(e.rewardName) : "") : esc(e.label || "Redeemed");
+    const src = e.type === "earn" ? esc(e.challenge || "Journey Optimizer") : e.type === "redeem" ? "Redemption" : "Account opened";
+    return `<tr><td>${new Date(e.at).toLocaleString()}</td><td>${what}</td><td>${src}</td><td class="${amt < 0 ? "neg" : "pos"}">${amt > 0 ? "+" : ""}${esc(amt)}${unit}</td></tr>`;
+  }).join("");
+}
+function loadLedger(){ fetch(ledgerUrl()).then(r => r.json()).then(j => showLedger(j.ledger)).catch(() => {}); }
+function redeem(b){
+  const n = b === "freeCoffee" ? 1 : Number(document.getElementById("lAmt").value) || 0;
+  const label = b === "freeCoffee" ? "Redeemed free coffee" : "Redeemed " + n + " points";
+  fetch(ledgerUrl(`&redeem=${b}&amount=${n}&label=${encodeURIComponent(label)}`)).then(r => r.json()).then(j => { if (j.error) alert(j.error); showLedger(j.ledger); });
+}
+function resetLedger(){ if (confirm("Reset this member to 100 points?")) fetch(ledgerUrl("&reset=true")).then(r => r.json()).then(j => showLedger(j.ledger)); }
+loadLedger(); setInterval(() => { if (!openIds.size) loadLedger(); }, 5000);
 </script>
 </body>
 </html>
